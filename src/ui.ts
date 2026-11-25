@@ -22,6 +22,20 @@ const btn=(parent:HTMLElement,txt:string,fn:()=>unknown,label?:string,cls="")=>{
 }
 const input=(p:HTMLElement,label:string,value:string,type="text")=>{const e=d(p,"input","fb-input") as HTMLInputElement;e.type=type;e.value=value;e.setAttribute("aria-label",label);return e}
 
+const indexGlyphs={
+ sort:"M7 4v16m-4-4 4 4 4-4m6 4V4m-4 4 4-4 4 4",
+ search:"M15.5 15.5 21 21 M17 10.5a6.5 6.5 0 1 1-13 0 6.5 6.5 0 1 1 13 0",
+ settings:"M4 7h16M4 17h16M8 4v6m8 4v6",
+ new:"M13 5H5v14h14v-8m-8 3 1-4 7-7 2 2-7 7-3 2z",
+ folder:"M3 6h7l2 3h9v10H3z",
+ close:"m6 6 12 12M18 6 6 18"
+}
+function indexIcon(parent:HTMLElement,name:keyof typeof indexGlyphs){
+ const ns="http://www.w3.org/2000/svg", svg=parent.ownerDocument.createElementNS(ns,"svg")
+ svg.setAttribute("viewBox","0 0 24 24");svg.setAttribute("aria-hidden","true")
+ const path=parent.ownerDocument.createElementNS(ns,"path")
+ path.setAttribute("d",indexGlyphs[name]);svg.append(path);parent.append(svg)
+}
 export class NotebookUI {
  readonly root:HTMLElement
  private doc:Document
@@ -68,6 +82,8 @@ export class NotebookUI {
  private marks:Mark[]=[]
  private bookmarks:Bookmark[]=[]
  private panel:Panel=null
+ private indexReversed=false
+ private appearanceFromIndex=false
  private mode:Mode="read"
  private dirty=false
  private markDirty=false
@@ -115,7 +131,7 @@ export class NotebookUI {
   if(store.sourceFolder){const folder=d(this.tools,"div","fb-tools-folder",store.sourceFolder);folder.title=store.sourceFolder}
   const tool=(caption:string,fn:()=>unknown,label?:string,cls="")=>btn(this.tools,caption,()=>{this.hideTools();return fn()},label,cls)
   tool("Back to cover",()=>this.run(()=>this.showCover()),"Back to cover")
-  this.contentsButton=tool("Contents",()=>this.togglePanel("contents"),"Contents")
+  this.contentsButton=tool("Contents",()=>this.run(()=>this.openIndex()),"Contents")
   this.bookmarksButton=tool("Saved pages",()=>this.togglePanel("bookmarks"),"Bookmarks")
   this.appearanceButton=tool("Appearance",()=>this.togglePanel("appearance"),"Appearance")
   this.pageLayoutButton=tool("1 Page",()=>this.run(async()=>{
@@ -260,7 +276,8 @@ export class NotebookUI {
   const v=this.win.visualViewport
   const focused=this.root.contains(this.doc.activeElement)
   const bottom=this.root.getBoundingClientRect().bottom
-  const cover=v&&focused&&this.mode==="type"?Math.max(0,bottom-v.height-v.offsetTop):0
+  const typing=this.mode==="type"||this.doc.activeElement?.matches(".fb-toc-search input")
+  const cover=v&&focused&&typing?Math.max(0,bottom-v.height-v.offsetTop):0
   this.root.style.setProperty("--fb-keyboard",Math.round(cover)+"px")
  }
  private enqueue<T>(task:()=>Promise<T>):Promise<T>{
@@ -529,12 +546,17 @@ export class NotebookUI {
  }
  private applyNotebookRecord(raw:string|null){
   const v=decodeSidecar(raw)
-  this.metaRaw=raw;this.metaAvailable=true;this.notebookRecord=v;this.appearance=appearance(v.appearance);this.bookmarks=safeBookmarks(v.bookmarks);this.applyAppearance()
+  this.metaRaw=raw;this.metaAvailable=true;this.notebookRecord=v
+  const style=appearance(v.appearance)
+  // Bring forward only the old stock look. Do not replace custom paper or type choices.
+  this.appearance=v.styleRevision!==1&&style.paper==="cream"&&style.ink==="green"&&style.type==="serif"
+   ?{...style,paper:"white",ink:"blue",type:"script"}:style
+  this.bookmarks=safeBookmarks(v.bookmarks);this.applyAppearance()
  }
  private async writeNotebook(patch:{appearance?:Appearance;bookmarks?:Bookmark[]}){
   return this.enqueue(async()=>{
    if(!this.metaAvailable)throw Error("Notebook settings could not be read. Existing file left alone.")
-   const next={...this.notebookRecord,...patch}
+   const next={...this.notebookRecord,...patch,...(patch.appearance?{styleRevision:1}:{})}
    const raw=encodeSidecar(next,this.metaRaw);await this.store.write(this.store.meta(),this.metaRaw,raw)
    this.metaRaw=raw;this.notebookRecord=next
    if(patch.appearance)this.appearance=patch.appearance
@@ -588,9 +610,10 @@ export class NotebookUI {
   this.root.dataset.panel=String(!!this.panel)
   this.root.dataset.indexPage=String(this.panel==="contents")
   const panel=this.panel
+  if(panel==="contents"){this.renderIndex();return}
   if(panel){
-   const header=d(this.left,"div","fb-panel-head");d(header,"h2","",({contents:"Table of contents",bookmarks:"Bookmarks",appearance:"Appearance",marks:"Text marks"})[panel])
-   btn(header,"×",()=>{if(panel==="contents"&&!this.current){this.panel=null;return this.run(()=>this.showCover())}this.togglePanel(panel)},"Close "+panel)
+   const header=d(this.left,"div","fb-panel-head");d(header,"h2","",({bookmarks:"Bookmarks",appearance:"Appearance",marks:"Text marks"})[panel])
+   btn(header,"×",()=>{if(panel==="appearance"&&this.appearanceFromIndex){this.appearanceFromIndex=false;return this.run(()=>this.openIndex())}this.togglePanel(panel)},"Close "+panel)
   }
   if(panel==="appearance"){this.renderAppearance();return}
   if(panel==="marks"){this.renderMarks();return}
@@ -614,9 +637,74 @@ export class NotebookUI {
   for(const p of this.pages){
    const row=btn(this.left,numericPageName(p)+"   "+p.title,()=>this.run(()=>this.go(p)),undefined,"fb-index")
    if(p.id===this.current?.id)row.setAttribute("aria-current","page")
-   if(panel==="contents")for(const h of headings(p.id===this.current?.id?this.editor?.state.doc.toString()??p.body:p.body).slice(0,30))btn(this.left,h.title,()=>this.run(()=>this.go(p,h.offset,undefined,h.title)),undefined,"fb-index fb-subheading")
   }
   if(!this.store.sourceFolder)btn(this.left,"＋ New page",()=>this.run(()=>this.append()),undefined,"fb-add-index")
+ }
+ private renderIndex(){
+  const sheet=d(this.left,"div","fb-toc")
+  d(sheet,"div","fb-toc-ribbon").setAttribute("aria-hidden","true")
+  const header=d(sheet,"div","fb-toc-header")
+  d(header,"h2","", "All Notes")
+  const round=(parent:HTMLElement,glyph:keyof typeof indexGlyphs,label:string,action:()=>unknown)=>{
+   const button=btn(parent,"",action,label,"fb-toc-round");indexIcon(button,glyph);return button
+  }
+  const sort=round(header,"sort","Reverse page order",()=>{
+   this.indexReversed=!this.indexReversed
+   sort.setAttribute("aria-pressed",String(this.indexReversed));draw();list.scrollTop=0
+  })
+  sort.setAttribute("aria-pressed",String(this.indexReversed))
+  round(header,"close","Close contents",()=>this.run(async()=>{
+   this.panel=null
+   if(!this.current)await this.showCover()
+   else{this.refresh();this.foot.querySelector<HTMLButtonElement>(".fb-home")?.focus()}
+  })).classList.add("fb-toc-close")
+  const list=d(sheet,"div","fb-toc-list")
+  const dock=d(sheet,"div","fb-toc-dock")
+  round(dock,"settings","Appearance",()=>{
+   this.appearanceFromIndex=true;this.panel="appearance";this.refresh()
+  })
+  const searchPill=d(dock,"label","fb-toc-search")
+  indexIcon(searchPill,"search")
+  const search=input(searchPill,"Search notes and headings","","search")
+  search.placeholder="Search"
+  round(dock,this.store.sourceFolder?"folder":"new",this.store.sourceFolder?"Choose folder":"New page",
+   this.store.sourceFolder?(this.cfg.choose??(()=>undefined)):(()=>this.run(()=>this.append())))
+  function filterText(s:string){return s.normalize("NFD").replace(/\p{M}/gu,"").toLocaleLowerCase()}
+  const rows=this.pages.map(p=>({p,sections:headings(p.id===this.current?.id?this.editor?.state.doc.toString()??p.body:p.body)}))
+  const draw=()=>{
+   list.replaceChildren()
+   const q=filterText(search.value.trim())
+   let found=0
+   for(const {p,sections} of this.indexReversed?[...rows].reverse():rows){
+    const suggested=q?sections.filter(h=>filterText(h.title).includes(q)):sections
+    if(q&&!filterText(p.title).includes(q)&&suggested.length===0)continue
+    found++
+    const item=d(list,"div","fb-toc-item")
+    const line=d(item,"div","fb-toc-line")
+    const jump=btn(line,"",()=>this.run(()=>this.go(p)),undefined,"fb-index fb-toc-note")
+    d(jump,"span","fb-toc-title",p.title)
+    d(jump,"span","fb-toc-number",String(p.number)).setAttribute("aria-hidden","true")
+    if(p.id===this.current?.id)jump.setAttribute("aria-current","page")
+    if(suggested.length){
+     const kids=d(item,"div","fb-toc-sections");kids.hidden=!q;kids.id=this.tools.id+"-note-"+found
+     const showSections=()=>{
+      if(kids.childElementCount)return
+      for(const h of suggested)btn(kids,h.title,()=>this.run(()=>this.go(p,h.offset,undefined,h.title)),undefined,"fb-index fb-subheading")
+     }
+     const expand=btn(line,"›",()=>{
+      kids.hidden=!kids.hidden
+      if(!kids.hidden)showSections()
+      expand.setAttribute("aria-expanded",String(!kids.hidden))
+     },"Headings for "+p.title,"fb-toc-expand")
+     expand.setAttribute("aria-controls",kids.id)
+     expand.setAttribute("aria-expanded",String(!kids.hidden))
+     if(q)showSections()
+    }
+   }
+   if(!found)d(list,"p","fb-hint",q?"No matching notes or headings.":this.store.sourceFolder?"No Markdown notes in this folder.":"No pages yet. Tap New page to start.")
+  }
+  search.addEventListener("input",()=>{draw();list.scrollTop=0})
+  draw()
  }
  private renderAppearance(){
   const saved={...this.appearance}
@@ -631,16 +719,17 @@ export class NotebookUI {
    const l=d(this.left,"label","fb-setting",label), e=input(l,label,this.appearance[key]);e.addEventListener("input",()=>set(key,e.value))
   }
   options("When opening",["resume","latest","contents","new"],this.appearance.open,v=>set("open",v))
-  options("Paper",["cream","rose","sky","contrast"],this.appearance.paper,v=>set("paper",v))
+  options("Paper",["white","cream","rose","sky","contrast"],this.appearance.paper,v=>set("paper",v))
   options("Ruling",["lined","grid","dotted","plain"],this.appearance.ruling,v=>set("ruling",v))
   options("Ink",["green","black","blue","umber"],this.appearance.ink,v=>set("ink",v))
   options("Typeface",["serif","sans","script"],this.appearance.type,v=>set("type",v))
   const sz=input(d(this.left,"label","fb-setting","Text size"),"Text size",String(this.appearance.size),"range");sz.min="16";sz.max="30";sz.addEventListener("input",()=>set("size",Number(sz.value)))
   const swipe=input(d(this.left,"label","fb-setting fb-check","Edge swipe (preview)"),"Enable edge swipe","on","checkbox");swipe.checked=this.appearance.swipe;swipe.addEventListener("change",()=>set("swipe",swipe.checked))
   const actions=d(this.left,"div","fb-settings-actions")
-  btn(actions,"Cancel",()=>{this.appearance=saved;this.panel=null;this.applyAppearance();this.refresh()})
+  const back=()=>{this.panel=this.appearanceFromIndex?"contents":null;this.appearanceFromIndex=false;this.refresh()}
+  btn(actions,"Cancel",()=>{this.appearance=saved;this.applyAppearance();back()})
   btn(actions,"Reset",()=>{this.appearance=appearance(null);this.applyAppearance();this.renderPanel()})
-  btn(actions,"Save",()=>this.run(async()=>{await this.writeNotebook({appearance:this.appearance});this.panel=null;this.refresh()}),undefined,"fb-primary")
+  btn(actions,"Save",()=>this.run(async()=>{await this.writeNotebook({appearance:this.appearance});back()}),undefined,"fb-primary")
  }
  private renderMarks(){
   d(this.left,"p","fb-hint","Select text on the page, then choose a mark. Marks follow the words when the page reflows.")

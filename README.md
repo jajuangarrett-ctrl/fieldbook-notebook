@@ -51,3 +51,5 @@ True paper curl, freehand ink and variable-pressure Pencil validation, photo pos
 Page arrows (and the optional reading edge swipe) turn the active paper leaf in 3D in both single-page and automatic spread layouts. Reduced Motion skips the effect. Contents and bookmark jumps open directly.
 
 **Table of contents** on the cover, the floating **Home** button on any page, or **Contents** in Notebook tools all open a full-page index. Tap a note or one of its headings to open it in Fieldbook.
+
+The **All Notes** index includes page numbers, a page-order toggle, a search box for note titles and headings, and per-note heading disclosures. Heading lists start collapsed. Fieldbook ships the offline [Kalam](https://github.com/itfoundry/kalam) handwriting font (SIL OFL 1.1); choose another typeface, ink color, or paper from **Appearance** at any time.

@@ -53,7 +53,7 @@ test("metadata fenced JSON validation and normalized enums",()=>{
  assert.deepEqual(decodeSidecar(null),{})
  assert.throws(()=>decodeSidecar("unrelated note"))
  assert.equal(appearance({size:55,paper:"nonsense"}).size,30)
- assert.equal(appearance({size:55,paper:"nonsense"}).paper,"cream")
+ assert.equal(appearance({size:55,paper:"nonsense"}).paper,"white")
 })
 test("path scope and deliberate edge gesture",()=>{
  for(const p of ["My Fieldbook","Areas/Fieldbook"])assert.equal(validateFolder(p),true)

@@ -1,5 +1,5 @@
-export const DEFAULT = {title:"Fieldbook", label:"FJG / VAULT", open:"resume", paper:"cream", ruling:"lined", ink:"green", type:"serif", size:20, swipe:false,single:false} as const
-export type Appearance = {title:string; label:string; open:"resume"|"latest"|"contents"|"new"; paper:"cream"|"rose"|"sky"|"contrast"; ruling:"lined"|"grid"|"dotted"|"plain"; ink:"green"|"black"|"blue"|"umber"; type:"serif"|"sans"|"script"; size:number; swipe:boolean; single:boolean}
+export const DEFAULT = {title:"Fieldbook", label:"FJG / VAULT", open:"resume", paper:"white", ruling:"lined", ink:"blue", type:"script", size:20, swipe:false,single:false} as const
+export type Appearance = {title:string; label:string; open:"resume"|"latest"|"contents"|"new"; paper:"white"|"cream"|"rose"|"sky"|"contrast"; ruling:"lined"|"grid"|"dotted"|"plain"; ink:"green"|"black"|"blue"|"umber"; type:"serif"|"sans"|"script"; size:number; swipe:boolean; single:boolean}
 export type Page = {id:string; number:number; path:string; title:string; header:string; body:string; raw:string; mtime:number}
 export type Bookmark = {id:string; offset:number; heading:string|null}
 export type MarkKind = "highlight"|"underline"|"strike"|"circle"
@@ -11,8 +11,8 @@ export function appearance(raw:unknown):Appearance {
  const a=(raw && typeof raw==="object"?raw:{}) as Record<string,unknown>
  const one=<T extends string>(k:string, vs:readonly T[], d:T):T=>vs.includes(a[k] as T)?a[k] as T:d
  return {title:typeof a.title==="string"?cleanTitle(a.title):DEFAULT.title,label:typeof a.label==="string"?a.label.replace(/[\r\n]/g," ").slice(0,50):DEFAULT.label,
- open:one("open",["resume","latest","contents","new"],"resume"),paper:one("paper",["cream","rose","sky","contrast"],"cream"),ruling:one("ruling",["lined","grid","dotted","plain"],"lined"),
- ink:one("ink",["green","black","blue","umber"],"green"),type:one("type",["serif","sans","script"],"serif"),
+ open:one("open",["resume","latest","contents","new"],"resume"),paper:one("paper",["white","cream","rose","sky","contrast"],DEFAULT.paper),ruling:one("ruling",["lined","grid","dotted","plain"],"lined"),
+ ink:one("ink",["green","black","blue","umber"],DEFAULT.ink),type:one("type",["serif","sans","script"],DEFAULT.type),
  size:typeof a.size==="number"&&Number.isFinite(a.size)?Math.min(30,Math.max(16,a.size)):20, swipe:a.swipe===true,single:a.single===true}
 }
 export function parsePage(raw:string,path:string,mtime=0):Page|null {
