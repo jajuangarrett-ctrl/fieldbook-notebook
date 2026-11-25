@@ -81,3 +81,22 @@
 .fb-root .fb-read-heading{font-weight:700}
 .fb-root .fb-read-h1,.fb-root .fb-read-h2{color:var(--fb-ink);letter-spacing:.008em}
 .fb-root .fb-read-glyph{display:inline-block;min-width:1.3em;color:var(--fb-ink)}
+/* Only Fieldbook owns these insets; host/system navigation stays intact. */
+.fb-root {--fb-dock:0px;--fb-bottom:calc(max(var(--fb-dock),var(--fb-keyboard))); }
+.fb-root .fb-book{padding-bottom:var(--fb-bottom)}
+.fb-root .fb-cover-screen{padding-bottom:max(16px,var(--fb-dock),env(safe-area-inset-bottom))}
+.fb-root .fb-status{bottom:calc(54px + var(--fb-bottom));max-height:45%;overflow:auto}
+.fb-root .fb-top{justify-content:space-evenly;gap:0;padding-top:0;padding-bottom:0}
+.fb-root[data-layout=wide] .fb-spread{padding:0;gap:2px}
+.fb-root[data-layout=wide] .fb-facing,.fb-root[data-layout=wide] .fb-page{border-radius:0}
+.fb-root .fb-source-chip{flex:0 0 auto;font:600 11px system-ui;padding:3px 14px 4px;background:#dbe7dc;color:#204438;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.fb-root .fb-source-reader{height:100%;overflow:auto;overscroll-behavior:contain;padding:0 0 32px;color:var(--fb-ink);font:var(--fb-font-size)/1.6 var(--fb-font);overflow-wrap:anywhere}
+.fb-root .fb-source-reader :is(h1,h2,h3,h4,h5,h6,p,li){color:inherit;font-family:inherit}
+.fb-root .fb-source-reader :is(img,video){max-width:100%}
+.fb-root .fb-source-reader pre,.fb-root .fb-source-reader table{max-width:100%;overflow:auto}
+.fb-root[data-source=true][data-empty=true] .fb-page::after{content:"Choose a Markdown note from Contents."}
+.fb-root[data-source=true] .fb-foot{justify-content:space-between}
+.fb-root[data-paper=cream] .fb-source-reader{background:var(--fb-paper)}
+.fb-root .fb-top{overflow-x:auto;justify-content:safe center;scrollbar-width:none}
+.fb-root .fb-top::-webkit-scrollbar{display:none}
+.fb-root .fb-choose-cover{background:#dbe7dc}

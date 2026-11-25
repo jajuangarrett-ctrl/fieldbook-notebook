@@ -1,12 +1,13 @@
 # Fieldbook Notebook for Obsidian
 
-Fieldbook 0.1.0 is a TypeDraw-inspired, non-desktop-only prototype built to the Fieldbook v2 mockup. It is a separate Obsidian plugin; it does not change or depend on FJG File Focus, Vault Control Center, Objectives, or Excalidraw.
+Fieldbook 0.1.1 is a TypeDraw-inspired, non-desktop-only prototype built to the Fieldbook v2 mockup. It is a separate Obsidian plugin; it does not change or depend on FJG File Focus, Vault Control Center, Objectives, or Excalidraw.
 
 ## Use
 
 Open **Fieldbook Notebook: Open Fieldbook** from the command palette or use the ribbon book icon. Tap the cover, then **＋** to add an actual Markdown page. No notes are created just by opening the view. For a different notebook folder, close Fieldbook first and use its community-plugin settings. The default folder is `Fieldbook Notebook`. Use a new folder for the first trial.
 
-- **Layout:** Single full-width page in a narrow or portrait-shaped view. Wide views show a facing page or contents next to the active page. This measures the Obsidian pane, not an OS hinge sensor.
+- **Existing notes:** Tap **Folder** (or run **Fieldbook Notebook: Choose folder**) to view Markdown notes in a selected vault folder and its subfolders. Contents lists them as pages. They stay read-only in Fieldbook; use ↗ to open an original in normal Obsidian. To return to writing pages, choose **Fieldbook notebook (create and edit pages)** in the folder picker. Folder view skips Excalidraw files and Fieldbook data.
+- **Layout:** Tap **1 Page** for a full-width single page even when unfolded; **Auto** brings back the spread on wide panes. Fieldbook keeps its controls above the mobile dock where the dock overlaps the view. The native Obsidian and iOS chrome stay intact. Single full-width page in a narrow or portrait-shaped view. Wide views show a facing page or contents next to the active page. This measures the Obsidian pane, not an OS hinge sensor.
 - **Navigation:** Contents shows pages and headings. Star a page, then use **Saved** to return. The numbered next/previous controls never create a page. **＋** appends one new Markdown page. The experimental edge turn can be enabled in Appearance; it is off by default and works only in Read mode. Page changes use a short transition, not a physical paper curl.
 - **Writing:** Tap **Type** for the title or Markdown body. Use Checklist, List, or Heading to add Markdown syntax. **Done** dismisses typing. The ↗ button opens the same note in normal Obsidian.
 - **Marks:** In Type mode select text and open **Marks**. Pick highlight, underline, circle or strike. Marks are separate from Markdown and track text edits and wrapping. For an uncertain external edit, open **Marks** to reattach to a new selection or discard. There is no automatic draw-to-mark recognition.
@@ -16,7 +17,7 @@ Open **Fieldbook Notebook: Open Fieldbook** from the command palette or use the 
 
 Pages are ordinary Markdown in the notebook's `Pages/` folder. Stable page IDs, rather than filenames, identify bookmarks and annotations. Bookmarks and style are saved in `Fieldbook Data/Notebook.md`; per-page marks are stored as companion Markdown records in the same folder so they can travel with the notes. These companions may appear in vault search. No network calls, permissions, or telemetry are part of the plugin.
 
-When Fieldbook detects it would overwrite an outside edit, it keeps the draft open instead. Use **Copy draft**, then explicitly reload when ready. If a conflicted tab is closed, Fieldbook tries to keep the Markdown draft in device-local app storage; use **Fieldbook Notebook: Copy Fieldbook recovery drafts**. Do not clear the app's data while recovering it. Physical-device sync behavior is not yet verified; test changes in a disposable notebook first.
+Edits to unrelated frontmatter on a managed page no longer block a compatible save; Fieldbook preserves them. When Fieldbook detects it would overwrite an outside text edit, it keeps the draft open instead. Use **Copy draft**, then explicitly reload when ready. If a conflicted tab is closed, Fieldbook tries to keep the Markdown draft in device-local app storage; use **Fieldbook Notebook: Copy Fieldbook recovery drafts**. Do not clear the app's data while recovering it. Physical-device sync behavior is not yet verified; test changes in a disposable notebook first.
 
 ## Install with BRAT
 

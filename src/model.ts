@@ -1,5 +1,5 @@
-export const DEFAULT = {title:"Fieldbook", label:"FJG / VAULT", open:"resume", paper:"cream", ruling:"lined", ink:"green", type:"serif", size:20, swipe:false} as const
-export type Appearance = {title:string; label:string; open:"resume"|"latest"|"contents"|"new"; paper:"cream"|"rose"|"sky"|"contrast"; ruling:"lined"|"grid"|"dotted"|"plain"; ink:"green"|"black"|"blue"|"umber"; type:"serif"|"sans"|"script"; size:number; swipe:boolean}
+export const DEFAULT = {title:"Fieldbook", label:"FJG / VAULT", open:"resume", paper:"cream", ruling:"lined", ink:"green", type:"serif", size:20, swipe:false,single:false} as const
+export type Appearance = {title:string; label:string; open:"resume"|"latest"|"contents"|"new"; paper:"cream"|"rose"|"sky"|"contrast"; ruling:"lined"|"grid"|"dotted"|"plain"; ink:"green"|"black"|"blue"|"umber"; type:"serif"|"sans"|"script"; size:number; swipe:boolean; single:boolean}
 export type Page = {id:string; number:number; path:string; title:string; header:string; body:string; raw:string; mtime:number}
 export type Bookmark = {id:string; offset:number; heading:string|null}
 export type MarkKind = "highlight"|"underline"|"strike"|"circle"
@@ -13,7 +13,7 @@ export function appearance(raw:unknown):Appearance {
  return {title:typeof a.title==="string"?cleanTitle(a.title):DEFAULT.title,label:typeof a.label==="string"?a.label.replace(/[\r\n]/g," ").slice(0,50):DEFAULT.label,
  open:one("open",["resume","latest","contents","new"],"resume"),paper:one("paper",["cream","rose","sky","contrast"],"cream"),ruling:one("ruling",["lined","grid","dotted","plain"],"lined"),
  ink:one("ink",["green","black","blue","umber"],"green"),type:one("type",["serif","sans","script"],"serif"),
- size:typeof a.size==="number"&&Number.isFinite(a.size)?Math.min(30,Math.max(16,a.size)):20, swipe:a.swipe===true}
+ size:typeof a.size==="number"&&Number.isFinite(a.size)?Math.min(30,Math.max(16,a.size)):20, swipe:a.swipe===true,single:a.single===true}
 }
 export function parsePage(raw:string,path:string,mtime=0):Page|null {
  const m=/^(---\r?\n[\s\S]*?\r?\n---\r?\n)([\s\S]*)$/.exec(raw);if(!m)return null
@@ -72,4 +72,39 @@ export function safeBookmarks(raw:unknown):Bookmark[]{
 }
 export function turnDirection(dx:number,dy:number,time:number):number {
  return Math.abs(dx)>Math.abs(dy)*1.7&&(Math.abs(dx)>=65||(Math.abs(dx)>=38&&Math.abs(dx)/Math.max(1,time)>=0.45))?(dx<0?1:-1):0
+}
+
+export function pageLayout(width:number,height:number,single:boolean):"wide"|"narrow"{
+ return !single&&width>=710&&width/Math.max(1,height)>=1.09?"wide":"narrow"
+}
+export function mergePageWrite(actual:string,expected:string,next:string,path:string):string|null{
+ if(actual===expected)return next
+ const a=parsePage(actual,path), e=parsePage(expected,path), n=parsePage(next,path)
+ if(!a||!e||!n||a.id!==e.id||n.id!==e.id||a.number!==e.number||n.number!==e.number)return null
+ const norm=(s:string)=>s.replace(/\r\n/g,"\n")
+ // A metadata-only change (e.g. properties or line endings) is not a competing text edit.
+ if(a.title!==e.title||norm(a.body)!==norm(e.body))return null
+ return serialize(a,n.title,n.body)
+}
+export function folderNoteID(path:string):string{
+ return [0,1,2,3].map(i=>digest(String(i)+":"+path).split(":")[0].padStart(8,"0")).join("")
+}
+export function isFolderNote(path:string,folder:string):boolean{
+ const rest=path.startsWith(folder+"/")?path.slice(folder.length+1):""
+ return !!rest&&/\.md$/i.test(rest)&&!(/\.excalidraw\.md$/i.test(rest)||rest.split("/").some(s=>s.startsWith(".")||s==="Fieldbook Data"))
+}
+export function folderPage(raw:string,path:string,number:number,mtime=0):Page|null{
+ if(/^---\r?\nfieldbook-sidecar: /m.test(raw.slice(0,180)))return null
+ const body=raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/,"").replace(/^\r?\n/,"")
+ const filename=path.split("/").pop()?.replace(/\.md$/i,"")??"Untitled"
+ return {id:folderNoteID(path),number,path,title:filename,header:"",body,raw,mtime}
+}
+export function bottomClearance(pane:{left:number;right:number;top:number;bottom:number}, docks:readonly {left:number;right:number;top:number;bottom:number}[]):number{
+ const overlap=docks.map(d=>{
+  const width=Math.min(pane.right,d.right)-Math.max(pane.left,d.left)
+  const height=pane.bottom-pane.top
+  if(width<=6||d.bottom<=pane.bottom-145||d.top>=pane.bottom||d.top<pane.top+height*.6)return 0
+  return pane.bottom-d.top+8
+ })
+ return Math.round(Math.max(0,...overlap))
 }

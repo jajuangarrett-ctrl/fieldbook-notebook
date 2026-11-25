@@ -20,6 +20,11 @@ try{
  for(const name of ['main.js','styles.css','manifest.json'])await copyFile('dist/'+name,join(plugin,name))
  await writeFile(join(config,'community-plugins.json'),'["fieldbook-notebook"]')
  await writeFile(join(config,'app.json'),'{"restrictedMode":false}')
+ const existing=join(vault,'Reference Notes')
+ await mkdir(join(existing,'Subfolder'),{recursive:true})
+ const existingText='# Existing note\n\n**Already in the vault.**\n'
+ await writeFile(join(existing,'Existing note.md'),existingText)
+ await writeFile(join(existing,'Subfolder','Nested note.md'),'Nested vault page.')
  await writeFile(join(profile,'obsidian.json'),JSON.stringify({vaults:{a000000000000001:{path:vault,ts:Date.now(),open:true}}}))
  child=spawn(obBin,['--user-data-dir='+profile,'--remote-debugging-port='+port,'--remote-debugging-address=127.0.0.1','--no-first-run'],{stdio:'ignore'})
  let active=false
@@ -53,8 +58,18 @@ try{
  assert.match(contents,/A normal Markdown note/)
  await mkdir('test-output',{recursive:true})
  await w.locator('.fb-root').screenshot({path:'test-output/04-obsidian-host.png'})
+ await w.getByRole('button',{name:'Choose folder',exact:true}).click({timeout:6000})
+ await w.locator('.suggestion-item').filter({hasText:/^Reference Notes$/}).click({timeout:6000})
+ await w.locator('.fb-source-reader strong').filter({hasText:'Already in the vault.'}).waitFor({timeout:8000})
+ assert.equal(await w.getByRole('button',{name:'Type or finish editing',exact:true}).count(),0)
+ await w.getByRole('button',{name:'Contents',exact:true}).click()
+ await w.getByRole('button',{name:/Nested note/}).click()
+ await w.locator('.fb-source-reader').getByText('Nested vault page.').waitFor()
+ assert.equal(await readFile(join(existing,'Existing note.md'),'utf8'),existingText)
+ assert.equal(await readFile(join(existing,'Subfolder','Nested note.md'),'utf8'),'Nested vault page.')
+ await w.locator('.fb-root').screenshot({path:'test-output/05-existing-folder.png'})
  assert.deepEqual(failures.filter(m=>m.includes('Fieldbook')),[])
- console.log('PASS: actual Obsidian in isolated profile; plugin loaded, Open Fieldbook command opened cover, practice page persisted to the disposable vault.')
+ console.log('PASS: actual Obsidian in isolated profile; plugin loaded, Open Fieldbook command opened cover, practice page persisted; native Markdown of selected folder and nested notes rendered read-only.')
 }finally{
  await app?.close().catch(()=>undefined)
  if(child?.exitCode===null){child.kill();await Promise.race([new Promise(r=>child.once("exit",r)),new Promise(r=>setTimeout(r,1500))])}

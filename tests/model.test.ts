@@ -1,7 +1,7 @@
 import test from "node:test"
 import assert from "node:assert/strict"
 import {ChangeSet} from "@codemirror/state"
-import {appearance,capture,decodeSidecar,digest,encodeSidecar,headings,mapMark,newPage,parsePage,relocate,serialize,turnDirection,validateFolder} from "../src/model"
+import {appearance,capture,decodeSidecar,digest,encodeSidecar,headings,mapMark,newPage,parsePage,relocate,serialize,turnDirection,validateFolder,mergePageWrite,bottomClearance,pageLayout,folderPage,isFolderNote} from "../src/model"
 const id="b0bfc881-433c-4618-8dc9-281b5c666b8e"
 test("created page has stable identity, editable heading and normal Markdown body",()=>{
  const raw=newPage(id,3,"Sample");const p=parsePage(raw,"Fieldbook Notebook/Pages/Page 003.md")!
@@ -62,4 +62,31 @@ test("path scope and deliberate edge gesture",()=>{
  assert.equal(turnDirection(50,8,90),-1)
  assert.equal(turnDirection(-70,50,100),0)
  assert.equal(turnDirection(-40,2,900),0)
+})
+
+test("save guard preserves unrelated frontmatter and rejects changed text",()=>{
+ const path="A/Pages/Test.md",r=newPage(id,1,"Page 1"),p=parsePage(r,path)!
+ const actual=r.replace("fieldbook-page-order: 1","fieldbook-page-order: 1\nlocation: origin")
+ const next=serialize(p,"Typed title","My text")
+ const merged=mergePageWrite(actual,r,next,path)!
+ assert.match(merged,/location: origin/);assert.match(merged,/# Typed title\n\nMy text/)
+ assert.equal(mergePageWrite(serialize(p,p.title,"External text"),r,next,path),null)
+ assert.equal(mergePageWrite(r.replace(id,"c"+id.slice(1)),r,next,path),null)
+})
+test("folder notes parse ordinary Markdown read-only without requiring frontmatter",()=>{
+ const p=folderPage("# Original title\n\nExample","People/Nested/Existing.md",2)!
+ assert.equal(p.title,"Existing");assert.match(p.body,/# Original title/)
+ assert.equal(folderPage("# Changed","People/Nested/Existing.md",4)?.id,p.id)
+ assert.equal(isFolderNote("People/Nested/Existing.md","People"),true)
+ for(const path of ["People.txt","Unrelated/One.md","People/Fieldbook Data/Notebook.md","People/file.excalidraw.md","People/.obsidian/file.md"])assert.equal(isFolderNote(path,"People"),false)
+})
+test("single layout at folded and portrait sizes; dock inset only for actual overlap",()=>{
+ assert.equal(pageLayout(386,678,false),"narrow")
+ assert.equal(pageLayout(871,669,false),"wide")
+ assert.equal(pageLayout(768,999,false),"narrow")
+ assert.equal(pageLayout(871,669,true),"narrow")
+ const pane={left:0,right:386,top:20,bottom:678}
+ assert.equal(bottomClearance(pane,[{left:48,right:338,top:605,bottom:665}]),81)
+ assert.equal(bottomClearance(pane,[{left:48,right:338,top:682,bottom:728}]),0)
+ assert.equal(bottomClearance(pane,[{left:400,right:430,top:615,bottom:672}]),0)
 })

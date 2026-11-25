@@ -2,7 +2,7 @@ import {Compartment,EditorState,Transaction,StateEffect,StateField} from "@codem
 import {Decoration,EditorView,keymap,drawSelection,placeholder,type ViewUpdate,type DecorationSet,WidgetType} from "@codemirror/view"
 import {defaultKeymap,history,historyKeymap} from "@codemirror/commands"
 import {markdown} from "@codemirror/lang-markdown"
-import {appearance,capture,clip,decodeSidecar,digest,encodeSidecar,headings,kinds,loadMarks,mapMark,numericPageName,parsePage,relocate,safeBookmarks,serialize,cleanTitle,turnDirection,type Appearance,type Bookmark,type Mark,type MarkKind,type Page} from "./model"
+import {appearance,capture,clip,decodeSidecar,digest,encodeSidecar,headings,kinds,loadMarks,mapMark,numericPageName,parsePage,relocate,safeBookmarks,serialize,cleanTitle,turnDirection,bottomClearance,pageLayout,type Appearance,type Bookmark,type Mark,type MarkKind,type Page} from "./model"
 import type {FileStore} from "./store"
 
 const setDeco=StateEffect.define<DecorationSet>()
@@ -53,6 +53,14 @@ export class NotebookUI {
  private edit=new Compartment()
  private pages:Page[]=[]
  private current:Page|null=null
+ private reader?:HTMLElement
+ private cleanupReader?:()=>void
+ private folderChip!:HTMLElement
+ private pageLayoutButton!:HTMLButtonElement
+ private dock?:Element
+ private dockWatch?:MutationObserver
+ private layoutFrame=0
+ private addedButton!:HTMLButtonElement
  private appearance=appearance(null)
  private metaRaw:string|null=null
  private markRaw:string|null=null
@@ -78,12 +86,13 @@ export class NotebookUI {
  private active=false
  private clock=0
 
- constructor(parent:HTMLElement,private store:FileStore,private cfg:{readSession:()=>Session|null; session:(s:Session)=>void; close:()=>void; notify:(s:string)=>void; recover?:(id:string,md:string)=>boolean}){
+ constructor(parent:HTMLElement,private store:FileStore,private cfg:{readSession:()=>Session|null; session:(s:Session)=>void; close:()=>void; notify:(s:string)=>void; recover?:(id:string,md:string)=>boolean; choose?:()=>void; mobile?:boolean; render?:(target:HTMLElement,markdown:string,path:string)=>Promise<()=>void>}){
   this.doc=parent.ownerDocument;this.win=this.doc.defaultView!
-  this.root=d(parent,"div","fb-root");this.root.dataset.layout="narrow";this.root.dataset.mode="read"
+  this.root=d(parent,"div","fb-root");this.root.dataset.layout="narrow";this.root.dataset.mode="read";this.root.dataset.source=String(!!store.sourceFolder)
   this.cover=d(this.root,"div","fb-cover-screen")
   const back=btn(this.cover,"‹  Back",cfg.close,"Close Fieldbook","fb-cover-exit")
   back.style.alignSelf="flex-start"
+  if(cfg.choose)btn(this.cover,"Choose folder",cfg.choose,"Choose folder","fb-choose-cover")
   const leather=d(this.cover,"div","fb-leather")
   d(leather,"span","fb-cover-kicker","FIELD NOTES   /   OBSIDIAN")
   const name=d(leather,"div","fb-label");this.coverName=d(name,"strong","","Fieldbook");this.coverLabel=d(name,"span","","FJG / VAULT")
@@ -99,7 +108,13 @@ export class NotebookUI {
   this.contentsButton=btn(this.top,"Contents",()=>this.togglePanel("contents"),"Contents")
   this.bookmarksButton=btn(this.top,"Saved",()=>this.togglePanel("bookmarks"),"Bookmarks")
   this.appearanceButton=btn(this.top,"Aa",()=>this.togglePanel("appearance"),"Appearance")
+  this.pageLayoutButton=btn(this.top,"1 Page",()=>this.run(async()=>{
+   await this.writeNotebook({appearance:{...this.appearance,single:!this.appearance.single}})
+   this.applyAppearance();this.layout()
+  }),"Toggle single page","fb-layout-toggle")
+  if(cfg.choose)btn(this.top,"Folder",cfg.choose,"Choose folder")
   this.openButton=btn(this.top,"↗",()=>this.run(async()=>{await this.flush();if(this.current)await this.store.open(this.current.path)}),"Open as a normal Obsidian note")
+  this.folderChip=d(this.book,"div","fb-source-chip",store.sourceFolder??"");this.folderChip.hidden=!store.sourceFolder
   this.spread=d(this.book,"div","fb-spread")
   this.left=d(this.spread,"aside","fb-facing")
   this.right=d(this.spread,"section","fb-page")
@@ -118,19 +133,30 @@ export class NotebookUI {
   this.typeButton=btn(this.foot,"Type",()=>this.run(()=>this.setMode(this.mode==="type"?"read":"type")),"Type or finish editing")
   this.markButton=btn(this.foot,"Marks",()=>this.togglePanel("marks"),"Text marks")
   this.next=btn(this.foot,"›",()=>this.run(()=>this.turn(1)),"Next page")
-  btn(this.foot,"＋",()=>this.run(()=>this.append()),"New page")
+  this.addedButton=btn(this.foot,"＋",()=>this.run(()=>this.append()),"New page")
+  this.addedButton.hidden=!!store.sourceFolder
   this.gutter=d(this.right,"div","fb-gutter");this.gutter.setAttribute("aria-hidden","true")
   this.gutter.addEventListener("pointerdown",e=>{if(this.mode!=="read"||!this.appearance.swipe||e.pointerType==="mouse"||!e.isPrimary)return;this.turnStart={id:e.pointerId,x:e.clientX,y:e.clientY,t:e.timeStamp};this.gutter.setPointerCapture(e.pointerId)})
   this.gutter.addEventListener("pointerup",e=>{const a=this.turnStart;this.turnStart=null;if(!a||a.id!==e.pointerId)return;const direction=turnDirection(e.clientX-a.x,e.clientY-a.y,e.timeStamp-a.t);if(direction)void this.run(()=>this.turn(direction))})
   this.gutter.addEventListener("pointercancel",()=>{this.turnStart=null})
   this.status=d(this.root,"div","fb-status");this.status.setAttribute("role","status");this.status.hidden=true
-  this.observer=new ResizeObserver(()=>this.layout());this.observer.observe(this.root)
+  this.observer=new ResizeObserver(this.queueLayout);this.observer.observe(this.root)
+  if(cfg.mobile){
+   // Host chrome may be created or hidden after the custom view opens.
+   this.dockWatch=new MutationObserver(records=>{
+    if(records.some(r=>!this.root.contains(r.target)))this.queueLayout()
+   })
+   this.dockWatch.observe(this.doc.body,{subtree:true,childList:true,attributes:true,attributeFilter:["class","hidden","style"]})
+  }
+  this.win.addEventListener("resize",this.queueLayout)
+  this.queueLayout()
   this.win.visualViewport?.addEventListener("resize",this.keyboard)
   this.win.visualViewport?.addEventListener("scroll",this.keyboard)
   this.root.addEventListener("focusin",this.keyboard)
   this.root.addEventListener("focusout",this.keyboard)
  }
- async init(){
+ async prepareSwitch(){await this.flush();this.record()}
+ async init(startOpen=false){
   this.active=true
   await this.run(async()=>{
    this.metaRaw=await this.store.read(this.store.meta())
@@ -139,6 +165,7 @@ export class NotebookUI {
    this.bookmarks=safeBookmarks(this.notebookRecord.bookmarks)
    this.lastSession=this.cfg.readSession()
    this.pages=await this.store.list();this.applyAppearance();this.layout();this.refresh()
+   if(startOpen)await this.openCover()
   })
  }
  recheck(){
@@ -150,12 +177,15 @@ export class NotebookUI {
     const pgs=await this.store.list()
     this.pages=pgs.map(p=>this.current?.id===p.id?this.current:p)
     const changed=this.current&&pgs.find(p=>p.id===this.current!.id)
+    if(this.current&&!changed&&this.store.sourceFolder){await this.loadFirstSource(pgs);return}
     if(this.current&&!changed){this.showStatus("This page moved outside Fieldbook or was removed. The open draft hasn’t been overwritten.");return}
     if(changed&&this.current){
-     const markChanged=(await this.store.read(this.store.meta(changed.id)))!==this.markRaw
+     const markChanged=!this.store.sourceFolder&&(await this.store.read(this.store.meta(changed.id)))!==this.markRaw
      if(changed.raw!==this.current.raw||changed.path!==this.current.path||markChanged){
-      if(this.dirty||this.markDirty||this.mode==="type"){this.conflict=true;this.showStatus("A synced change arrived while editing. Your draft is still open. Copy it before loading the saved version.",true)}
-      else await this.load(changed,this.editor?.state.selection.main.head)
+      const metadataOnly=changed.path===this.current.path&&changed.title===this.current.title&&changed.body.replace(/\r\n/g,"\n")===this.current.body.replace(/\r\n/g,"\n")&&!markChanged
+      if(metadataOnly){this.current=changed;this.pages=this.pages.map(p=>p.id===changed.id?changed:p)}
+      else if(this.dirty||this.markDirty||this.mode==="type"){this.conflict=true;this.showStatus("A synced change arrived while editing. Your draft is still open. Copy it before loading the saved version.",true)}
+      else await this.load(changed,this.editor?.state.selection.main.head,this.reader?.scrollTop)
      }
     }
     const latest=await this.store.read(this.store.meta())
@@ -166,20 +196,38 @@ export class NotebookUI {
    }catch(e){this.report(e)}
   })},230)
  }
+ private queueLayout=()=>{
+  if(this.layoutFrame||this.destroyed)return
+  this.layoutFrame=this.win.requestAnimationFrame(()=>{this.layoutFrame=0;this.layout()})
+ }
  private layout(){
   const box=this.root.getBoundingClientRect()
-  const wide=box.width>=710&&box.width/Math.max(1,box.height)>=1.09
+  const preference=this.appearance.single
+  const chosen=pageLayout(box.width,box.height,preference)
   const previous=this.root.dataset.layout
-  this.root.dataset.layout=wide?"wide":"narrow"
-  if(previous!==this.root.dataset.layout&&this.panel===null)this.renderPanel()
+  this.root.dataset.layout=chosen
+  this.pageLayoutButton.textContent=preference?"Auto":"1 Page"
+  this.pageLayoutButton.setAttribute("aria-pressed",String(preference))
+  if(previous!==chosen&&this.panel===null)this.renderPanel()
+  const node=this.cfg.mobile?this.doc.querySelector(".mobile-navbar"):null
+  if(node!==this.dock){
+   if(this.dock)this.observer.unobserve(this.dock)
+   if(node)this.observer.observe(node)
+   this.dock=node??undefined
+  }
+  const docks=this.cfg.mobile?Array.from(this.doc.querySelectorAll(".mobile-navbar,.mobile-toolbar")).filter(el=>{
+   const style=this.win.getComputedStyle(el)
+   return style.display!=="none"&&style.visibility!=="hidden"&&Number(style.opacity)>0
+  }).map(el=>el.getBoundingClientRect()):[]
+  this.root.style.setProperty("--fb-dock",bottomClearance(box,docks)+"px")
   this.keyboard()
  }
  private keyboard=()=>{
   const v=this.win.visualViewport
   const focused=this.root.contains(this.doc.activeElement)
   const bottom=this.root.getBoundingClientRect().bottom
-  const cover=v&&focused&&this.mode==="type"?Math.max(0,Math.min(340,bottom-v.height-v.offsetTop)):0
-  this.root.style.setProperty("--fb-keyboard",cover+"px")
+  const cover=v&&focused&&this.mode==="type"?Math.max(0,bottom-v.height-v.offsetTop):0
+  this.root.style.setProperty("--fb-keyboard",Math.round(cover)+"px")
  }
  private enqueue<T>(task:()=>Promise<T>):Promise<T>{
   const p=this.queue.catch(()=>undefined).then(task);this.queue=p.catch(()=>undefined);return p
@@ -203,7 +251,7 @@ export class NotebookUI {
      if(!this.current)return
      if(this.timer){clearTimeout(this.timer);this.timer=undefined}
      const raw=await this.store.read(this.current.path)
-     const p=raw===null?null:parsePage(raw,this.current.path,Date.now())
+     const p=raw===null?null:this.store.parse(raw,this.current)
      if(!p)throw Error("The saved page could not be read.")
      this.dirty=false; this.markDirty=false;await this.load(p,this.editor?.state.selection.main.head);this.refresh()
     })
@@ -218,7 +266,7 @@ export class NotebookUI {
  private async openCover(){
   this.bookOn()
   const start=this.appearance.open
-  if(start==="new"){await this.append();return}
+  if(start==="new"&&!this.store.sourceFolder){await this.append();return}
   if(start==="contents"){this.panel="contents";this.refresh();return}
   const p=start==="latest"?[...this.pages].sort((a,b)=>b.mtime-a.mtime)[0]:this.pages.find(x=>x.id===this.lastSession?.id)??this.pages[0]
   if(p)await this.go(p,this.lastSession?.id===p.id?this.lastSession.offset:undefined,this.lastSession?.id===p.id?this.lastSession.top:undefined)
@@ -230,6 +278,10 @@ export class NotebookUI {
   this.sessionTimer=setTimeout(()=>{if(this.active)this.record()},300)
  }
  private record(){
+  if(this.current&&this.reader){
+   this.lastSession={id:this.current.id,offset:0,top:this.reader.scrollTop}
+   this.cfg.session(this.lastSession);return
+  }
   if(!this.current||!this.editor)return
   const s=this.editor.state.selection.main, top=this.editor.scrollDOM.scrollTop
   this.positions.set(this.current.id,{offset:s.anchor,end:s.head,top});this.lastSession={id:this.current.id,offset:s.head,top};this.cfg.session(this.lastSession)
@@ -248,13 +300,34 @@ export class NotebookUI {
   if(this.destroyed)return
   await this.flush();this.record()
   const fresh=await this.store.read(page.path)
-  const read=fresh===null?null:parsePage(fresh,page.path,page.mtime)
+  const read=fresh===null?null:this.store.parse(fresh,page)
   if(!read||read.id!==page.id)throw Error("The page moved. Reopen it from Contents.")
   if(heading){const h=headings(read.body).filter(r=>r.title===heading);if(h.length===1){offset=h[0].offset;top=undefined}}
-  await this.load(read,offset,top)
+  await this.load(read,offset,top,heading)
   this.panel=null;this.bookOn();this.refresh()
  }
- private async load(p:Page,offset?:number,top?:number){
+ private async loadFirstSource(rows:Page[]){
+  this.current=null;this.cleanupReader?.();this.cleanupReader=undefined;this.reader=undefined;this.body.replaceChildren()
+  if(rows[0])await this.load(rows[0])
+  else this.panel="contents"
+  this.refresh()
+ }
+ private async load(p:Page,offset?:number,top?:number,heading?:string|null){
+  this.cleanupReader?.();this.cleanupReader=undefined;this.reader=undefined
+  if(this.store.sourceFolder){
+   this.body.replaceChildren()
+   this.current=p;this.mode="read";this.markRaw=null;this.title.value=p.title
+   const reader=d(this.body,"article","fb-source-reader markdown-rendered")
+   this.reader=reader
+   if(this.cfg.render)this.cleanupReader=await this.cfg.render(reader,p.body,p.path)
+   else reader.textContent=p.body
+   reader.addEventListener("scroll",this.savePositionSoon,{passive:true})
+   if(heading){
+    const target=Array.from(reader.querySelectorAll("h1,h2,h3,h4,h5,h6")).find(e=>e.textContent===heading) as HTMLElement|undefined
+    if(target)reader.scrollTop=target.getBoundingClientRect().top-reader.getBoundingClientRect().top+reader.scrollTop
+   }else if(top!==undefined)reader.scrollTop=top
+   this.hideStatus();return
+  }
   const mPath=this.store.meta(p.id),mr=await this.store.read(mPath)
   const meta=decodeSidecar(mr),same=meta.basis===digest(p.body)
   const pos=this.positions.get(p.id)
@@ -355,8 +428,8 @@ export class NotebookUI {
     // Validate sidecar before saving; any later sidecar conflict is handled separately.
     if(this.markDirty&&(await this.store.read(this.store.meta(p.id)))!==this.markRaw)throw Error("Text marks changed on another device. Copy your draft before reloading.")
     if(this.dirty){
-     await this.store.write(p.path,p.raw,raw)
-     const saved=parsePage(raw,p.path,raw===p.raw?p.mtime:Date.now())!
+     const written=await this.store.write(p.path,p.raw,raw)
+     const saved=parsePage(written,p.path,written===p.raw?p.mtime:Date.now())!
      this.current=saved;this.pages=this.pages.map(x=>x.id===saved.id?saved:x)
      if(tick===this.clock)this.dirty=false
     }
@@ -383,9 +456,11 @@ export class NotebookUI {
   })
  }
  private async toggleBookmark(){
-  const p=this.current, e=this.editor;if(!p||!e)return
-  const offset=e.state.selection.main.head, hs=headings(e.state.doc.toString()).filter(h=>h.offset<=offset)
-  const next=this.bookmarks.some(x=>x.id===p.id)?this.bookmarks.filter(x=>x.id!==p.id):[...this.bookmarks,{id:p.id,offset,heading:hs[hs.length-1]?.title??null}]
+  const p=this.current, e=this.editor;if(!p||!e&&!this.reader)return
+  const offset=e?.state.selection.main.head??0
+  const hs=e?headings(e.state.doc.toString()).filter(h=>h.offset<=offset):[]
+  const visibleHeading=this.reader?Array.from(this.reader.querySelectorAll("h1,h2,h3,h4,h5,h6")).filter(h=>h.getBoundingClientRect().top<=this.reader!.getBoundingClientRect().top+30).slice(-1)[0]?.textContent:null
+  const next=this.bookmarks.some(x=>x.id===p.id)?this.bookmarks.filter(x=>x.id!==p.id):[...this.bookmarks,{id:p.id,offset,heading:visibleHeading??hs[hs.length-1]?.title??null}]
   await this.writeNotebook({bookmarks:next});this.refresh()
  }
  private async turn(dir:number){
@@ -400,7 +475,7 @@ export class NotebookUI {
   const v=this.appearance
   Object.assign(this.root.dataset,{paper:v.paper,ruling:v.ruling,ink:v.ink,font:v.type,swipe:String(v.swipe)})
   this.root.style.setProperty("--fb-font-size",v.size+"px")
-  this.coverName.textContent=v.title;this.coverLabel.textContent=v.label
+  this.coverName.textContent=this.store.sourceFolder?.split("/").pop()??v.title;this.coverLabel.textContent=this.store.sourceFolder?"VAULT FOLDER":v.label
   this.applyMode()
  }
  private updateTurnControls(){
@@ -412,6 +487,7 @@ export class NotebookUI {
   this.root.dataset.empty=String(!p)
   this.pageNo.textContent=p?"PAGE "+numericPageName(p)+"  /  "+this.pages.length:"YOUR NOTEBOOK"
   this.updateTurnControls()
+  this.typeButton.hidden=this.markButton.hidden=!!this.store.sourceFolder
   this.typeButton.disabled=this.markButton.disabled=this.bookmarkButton.disabled=this.openButton.disabled=!p
   this.bookmarkButton.textContent=p&&this.bookmarks.some(x=>x.id===p.id)?"★":"☆"
   this.bookmarkButton.setAttribute("aria-pressed",String(this.bookmarkButton.textContent==="★"))
@@ -445,13 +521,13 @@ export class NotebookUI {
    }
   }
   if(!panel)d(this.left,"h2","fb-facing-title","Contents")
-  if(!this.pages.length)d(this.left,"p","fb-hint","A new notebook starts with one blank page.")
+  if(!this.pages.length)d(this.left,"p","fb-hint",this.store.sourceFolder?"No Markdown notes in this folder.":"A new notebook starts with one blank page.")
   for(const p of this.pages){
    const row=btn(this.left,numericPageName(p)+"   "+p.title,()=>this.run(()=>this.go(p)),undefined,"fb-index")
    if(p.id===this.current?.id)row.setAttribute("aria-current","page")
-   if(panel==="contents")for(const h of headings(p.id===this.current?.id?this.editor?.state.doc.toString()??p.body:p.body).slice(0,30))btn(this.left,h.title,()=>this.run(()=>this.go(p,h.offset)),undefined,"fb-index fb-subheading")
+   if(panel==="contents")for(const h of headings(p.id===this.current?.id?this.editor?.state.doc.toString()??p.body:p.body).slice(0,30))btn(this.left,h.title,()=>this.run(()=>this.go(p,h.offset,undefined,h.title)),undefined,"fb-index fb-subheading")
   }
-  btn(this.left,"＋ New page",()=>this.run(()=>this.append()),undefined,"fb-add-index")
+  if(!this.store.sourceFolder)btn(this.left,"＋ New page",()=>this.run(()=>this.append()),undefined,"fb-add-index")
  }
  private renderAppearance(){
   const saved={...this.appearance}
@@ -520,7 +596,9 @@ export class NotebookUI {
   try{await this.flush()}catch(e){
    if(this.current&&this.editor&&!this.cfg.recover?.(this.current.id,serialize(this.current,this.title.value,this.editor.state.doc.toString())))this.cfg.notify("Fieldbook closed before a conflicted draft could be saved.")
   }
-  this.destroyed=true;this.observer.disconnect();this.editor?.destroy()
+  this.destroyed=true;this.observer.disconnect();this.dockWatch?.disconnect();this.editor?.destroy();this.cleanupReader?.()
+  if(this.layoutFrame)this.win.cancelAnimationFrame(this.layoutFrame)
+  this.win.removeEventListener("resize",this.queueLayout)
   if(this.timer)clearTimeout(this.timer)
   if(this.changeTimer)clearTimeout(this.changeTimer)
   if(this.sessionTimer)clearTimeout(this.sessionTimer)
