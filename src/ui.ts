@@ -83,6 +83,7 @@ export class NotebookUI {
  private notebookRecord:Record<string,unknown>={}
  private positions=new Map<string,{offset:number;end:number;top:number}>()
  private turnStart:{id:number;x:number;y:number;t:number}|null=null
+ private leafTurn?:Animation
  private conflict=false
  private active=false
  private clock=0
@@ -98,10 +99,12 @@ export class NotebookUI {
   d(leather,"span","fb-cover-kicker","FIELD NOTES   /   OBSIDIAN")
   const name=d(leather,"div","fb-label");this.coverName=d(name,"strong","","Fieldbook");this.coverLabel=d(name,"span","","FJG / VAULT")
   const strap=d(leather,"span","fb-strap");strap.setAttribute("aria-hidden","true")
-  const enter=btn(leather,"Open notebook   ›",()=>this.run(()=>this.openCover()),"Open notebook","fb-open-cover")
+  const coverActions=d(leather,"div","fb-cover-actions")
+  btn(coverActions,"Open notebook   ›",()=>this.run(()=>this.openCover()),"Open notebook","fb-open-cover")
+  btn(coverActions,"Table of contents",()=>this.run(()=>this.openIndex()),"Table of contents","fb-open-cover")
   let coverStart:number|null=null
   leather.addEventListener("pointerdown",e=>{coverStart=e.clientX})
-  leather.addEventListener("pointerup",e=>{if(coverStart!==null&&coverStart-e.clientX>60&&e.target!==enter)void this.run(()=>this.openCover());coverStart=null})
+  leather.addEventListener("pointerup",e=>{if(coverStart!==null&&coverStart-e.clientX>60&&!(e.target instanceof Element&&e.target.closest("button")))void this.run(()=>this.openCover());coverStart=null})
   leather.addEventListener("pointercancel",()=>{coverStart=null})
   this.book=d(this.root,"div","fb-book");this.book.hidden=true
   this.tools=d(this.book,"div","fb-tools")
@@ -139,6 +142,7 @@ export class NotebookUI {
    const k=btn(this.mini,name,action);k.addEventListener("pointerdown",e=>e.preventDefault())
   }
   this.foot=d(this.book,"div","fb-foot")
+  btn(this.foot,"⌂",()=>this.run(()=>this.openIndex()),"Home: Table of contents","fb-home")
   this.prev=btn(this.foot,"‹",()=>{this.hideTools();return this.run(()=>this.turn(-1))},"Previous page")
   this.next=btn(this.foot,"›",()=>{this.hideTools();return this.run(()=>this.turn(1))},"Next page")
   this.toolsToggle=btn(this.foot,"•••",()=>{if(this.tools.hidden)this.showTools();else this.hideTools()},"Notebook tools","fb-tools-toggle")
@@ -234,6 +238,7 @@ export class NotebookUI {
   const preference=this.appearance.single
   const chosen=pageLayout(box.width,box.height,preference)
   const previous=this.root.dataset.layout
+  if(previous!==chosen)this.leafTurn?.cancel()
   this.root.dataset.layout=chosen
   this.pageLayoutButton.textContent=preference?"Auto spread":"1 Page (full width)"
   this.pageLayoutButton.setAttribute("aria-pressed",String(preference))
@@ -292,6 +297,15 @@ export class NotebookUI {
  private hideStatus(){this.status.hidden=true;this.status.replaceChildren()}
  private async showCover(){this.hideTools();await this.flush();this.record();this.book.hidden=true;this.cover.hidden=false;this.hideStatus()}
  private bookOn(){this.cover.hidden=true;this.book.hidden=false;this.layout()}
+ private async openIndex(){
+  this.hideTools()
+  if(this.mode==="type")await this.setMode("read",false)
+  this.record()
+  this.bookOn();this.panel="contents";this.refresh()
+  this.left.scrollTop=0
+  const heading=this.left.querySelector("h2")
+  if(heading){heading.tabIndex=-1;heading.focus({preventScroll:true})}
+ }
  private async openCover(){
   this.bookOn()
   const start=this.appearance.open
@@ -325,15 +339,53 @@ export class NotebookUI {
   this.title.focus()
   this.title.select()
  }
- private async go(page:Page,offset?:number,top?:number,heading?:string|null){
+ private async go(page:Page,offset?:number,top?:number,heading?:string|null,direction?:-1|1){
   if(this.destroyed)return
   await this.flush();this.record()
   const fresh=await this.store.read(page.path)
   const read=fresh===null?null:this.store.parse(fresh,page)
   if(!read||read.id!==page.id)throw Error("The page moved. Reopen it from Contents.")
   if(heading){const h=headings(read.body).filter(r=>r.title===heading);if(h.length===1){offset=h[0].offset;top=undefined}}
-  await this.load(read,offset,top,heading)
-  this.panel=null;this.bookOn();this.refresh()
+  const motion=this.win.matchMedia("(prefers-reduced-motion: reduce)")
+  const canTurn=direction!==undefined&&typeof this.right.animate==="function"&&!motion.matches&&this.active&&!this.book.hidden
+  if(!canTurn){
+   if(!this.active)return
+   await this.load(read,offset,top,heading)
+   this.panel=null;this.bookOn();this.refresh()
+   return
+  }
+  // Animate the real leaf, never clone the Markdown DOM or repeat its embeds.
+  const layout=this.root.dataset.layout
+  const edge=layout==="wide"||direction===1?"left":"right"
+  const flat="perspective(1100px) rotateY(0deg)"
+  const tilt=(angle:number)=>"perspective(1100px) rotateY("+angle+"deg)"
+  const origin=edge+" center"
+  const sign=direction===1?-1:1
+  this.spread.dataset.turning=String(direction)
+  const stop=()=>this.leafTurn?.cancel()
+  motion.addEventListener("change",stop)
+  try{
+   const outgoing=this.animateLeaf(
+    [{transform:flat,filter:"brightness(1)"},{transform:tilt(sign*83),filter:"brightness(.76)"}],
+    origin,185,"cubic-bezier(.45,.02,.84,.52)")
+   const turned=await outgoing.finished.then(()=>true,()=>false)
+   if(!this.active)return
+   await this.load(read,offset,top,heading)
+   if(!this.active)return
+   this.panel=null;this.bookOn();this.refresh()
+   const showTurn=turned&&outgoing.playState!=="idle"&&layout===this.root.dataset.layout&&!motion.matches
+   outgoing.cancel()
+   if(showTurn){
+    const incoming=this.animateLeaf(
+     [{transform:tilt(-sign*80),filter:"brightness(.8)"},{transform:flat,filter:"brightness(1)"}],
+     origin,235,"cubic-bezier(.15,.54,.25,1)")
+    await incoming.finished.catch(()=>undefined)
+   }
+  }finally{
+   motion.removeEventListener("change",stop)
+   stop();this.leafTurn=undefined
+   delete this.spread.dataset.turning
+  }
  }
  private async loadFirstSource(rows:Page[]){
   this.current=null;this.cleanupReader?.();this.cleanupReader=undefined;this.reader=undefined;this.body.replaceChildren()
@@ -497,12 +549,14 @@ export class NotebookUI {
   const next=this.bookmarks.some(x=>x.id===p.id)?this.bookmarks.filter(x=>x.id!==p.id):[...this.bookmarks,{id:p.id,offset,heading:visibleHeading??hs[hs.length-1]?.title??null}]
   await this.writeNotebook({bookmarks:next});this.refresh()
  }
- private async turn(dir:number){
+ private animateLeaf(frames:Keyframe[],origin:string,duration:number,easing:string){
+  return this.leafTurn=this.right.animate(frames.map(frame=>({...frame,transformOrigin:origin})),{duration,easing,fill:"both"})
+ }
+ private async turn(dir:-1|1){
   if(this.mode==="type")return
   const i=this.pages.findIndex(x=>x.id===this.current?.id)
   const p=this.pages[i+dir];if(!p)return
-  await this.go(p)
-  if(!this.win.matchMedia("(prefers-reduced-motion: reduce)").matches)this.right.animate([{opacity:0.55,transform:"translateX("+(dir*9)+"px)"},{opacity:1,transform:"none"}],{duration:190,easing:"ease-out"})
+  await this.go(p,undefined,undefined,undefined,dir)
  }
  private togglePanel(p:Panel){this.panel=this.panel===p?null:p;this.refresh()}
  private applyAppearance(){
@@ -532,10 +586,11 @@ export class NotebookUI {
  private renderPanel(){
   this.left.replaceChildren()
   this.root.dataset.panel=String(!!this.panel)
+  this.root.dataset.indexPage=String(this.panel==="contents")
   const panel=this.panel
   if(panel){
-   const header=d(this.left,"div","fb-panel-head");d(header,"h2","",({contents:"Contents",bookmarks:"Bookmarks",appearance:"Appearance",marks:"Text marks"})[panel])
-   btn(header,"×",()=>this.togglePanel(panel),"Close "+panel)
+   const header=d(this.left,"div","fb-panel-head");d(header,"h2","",({contents:"Table of contents",bookmarks:"Bookmarks",appearance:"Appearance",marks:"Text marks"})[panel])
+   btn(header,"×",()=>{if(panel==="contents"&&!this.current){this.panel=null;return this.run(()=>this.showCover())}this.togglePanel(panel)},"Close "+panel)
   }
   if(panel==="appearance"){this.renderAppearance();return}
   if(panel==="marks"){this.renderMarks();return}
@@ -626,6 +681,7 @@ export class NotebookUI {
  async destroy(){
   if(this.destroyed)return
   this.active=false
+  this.leafTurn?.cancel()
   this.record()
   try{await this.flush()}catch(e){
    if(this.current&&this.editor&&!this.cfg.recover?.(this.current.id,serialize(this.current,this.title.value,this.editor.state.doc.toString())))this.cfg.notify("Fieldbook closed before a conflicted draft could be saved.")

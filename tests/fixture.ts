@@ -30,6 +30,7 @@ Object.assign(window,{fixture:{
  recover:()=>[...local.values()], recheck:()=>ui.recheck(),
  props:()=>{const p=rawPages()[0];files.set(p.path,p.raw.replace("fieldbook-page-order: 1","fieldbook-page-order: 1\nlocation: mobile-note"));ui.recheck()},
  change:(n:number,s:string)=>{const p=rawPages()[n-1];files.set(p.path,serialize(p,p.title,s));ui.recheck()},
+ selection:()=>{const el=holder.querySelector<HTMLElement>(".cm-editor");return el&&EditorView.findFromDOM(el)?.state.selection.main.head},
  focusPage:(from:number,to:number)=>{
   const e=holder.querySelector<HTMLElement>(".cm-editor");if(!e)throw Error("Editor missing")
   const view=EditorView.findFromDOM(e);if(!view)throw Error("No view")

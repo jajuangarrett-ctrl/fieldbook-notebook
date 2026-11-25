@@ -78,7 +78,7 @@ export function loadMarks(raw:unknown):Mark[] {
 export function safeBookmarks(raw:unknown):Bookmark[]{
  return Array.isArray(raw)?raw.filter((b):b is Bookmark=>b&&validID(b.id)&&Number.isSafeInteger(b.offset)&&b.offset>=0&&(b.heading===null||typeof b.heading==="string")):[]
 }
-export function turnDirection(dx:number,dy:number,time:number):number {
+export function turnDirection(dx:number,dy:number,time:number):-1|0|1 {
  return Math.abs(dx)>Math.abs(dy)*1.7&&(Math.abs(dx)>=65||(Math.abs(dx)>=38&&Math.abs(dx)/Math.max(1,time)>=0.45))?(dx<0?1:-1):0
 }
 
