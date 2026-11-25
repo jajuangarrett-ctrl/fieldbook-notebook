@@ -87,32 +87,43 @@ try{
  assert.equal(await p.locator('.fb-spread[data-turning]').count(),0,'Reduced Motion must not animate')
  await p.emulateMedia({reducedMotion:'no-preference'})
  const leaf=p.locator('.fb-page'), spread=p.locator('.fb-spread')
- const checkTurn=async(buttonName,dir,edge,titleValue)=>{
+ const checkTurn=async(buttonName,dir,titleValue)=>{
   // Pause each phase at a known point so these assertions do not depend on timing.
   await p.evaluate(()=>{
    const animate=HTMLElement.prototype.animate
    const leaf=document.querySelector('.fb-page')
-   leaf.animate=function(...args){const a=animate.apply(this,args);a.pause();a.currentTime=60;window.testTurn=a;return a}
+   leaf.animate=function(...args){
+    const a=animate.apply(this,args), roll=document.querySelector('.fb-paper-curl').getAnimations()[0]
+    const half=Number(a.effect.getTiming().duration)/2
+    for(const motion of [a,roll]){motion.pause();motion.currentTime=half}
+    window.testTurn=a;window.testRoll=roll;return a
+   }
   })
   await button(buttonName).click()
   await p.waitForFunction(()=>window.testTurn?.playState==='paused')
   assert.equal(await spread.getAttribute('data-turning'),String(dir))
-  const [origin,transform,backing]=await leaf.evaluate(el=>[
-   window.testTurn.effect.getKeyframes()[0].transformOrigin,getComputedStyle(el).transform,
-   getComputedStyle(el.parentNode,'::before').backgroundImage])
-  assert.equal(origin,edge+' center');assert.match(transform,/matrix3d/);assert.match(backing,/linear-gradient/)
-  await p.evaluate(()=>{window.firstTurn=window.testTurn;window.testTurn.finish()})
+  const [clip,rollClip,side,shade,turnStart]=await leaf.evaluate(el=>{
+   const curl=el.parentNode.querySelector('.fb-paper-curl'), css=getComputedStyle(curl)
+   return [getComputedStyle(el).clipPath,css.clipPath,curl.dataset.curlSide,css.backgroundImage,window.testTurn.effect.getKeyframes()[0].clipPath]
+  })
+  assert.match(clip,/^polygon/);assert.match(rollClip,/^polygon/)
+  assert.ok(new Set(clip.slice(8,-1).split(',').map(point=>point.trim().split(' ')[0])).size>8,'The bend must not be a flat edge')
+  assert.match(turnStart,dir===1?/^polygon\(0% 0%, 100% 0%/:/^polygon\(100% 0%, 0% 0%/)
+  assert.equal(side,String(dir));assert.match(shade,/linear-gradient/)
+  if(dir===1)await p.screenshot({path:'test-output/curl-'+await root.getAttribute('data-layout')+'.png',animations:'allow'})
+  await p.evaluate(()=>{window.firstTurn=window.testTurn;window.testRoll.finish();window.testTurn.finish()})
   await p.waitForFunction(()=>window.testTurn!==window.firstTurn)
   assert.equal(await title.inputValue(),titleValue)
-  await p.evaluate(()=>window.testTurn.finish())
+  assert.equal(await p.locator('.fb-paper-curl').getAttribute('data-curl-side'),String(-dir))
+  await p.evaluate(()=>{window.testRoll.finish();window.testTurn.finish()})
   await p.waitForFunction(()=>!document.querySelector('.fb-spread').hasAttribute('data-turning'))
   assert.equal(await leaf.evaluate(el=>el.getAnimations().length),0)
  }
- await checkTurn('Next page',1,'left','Second page')
+ await checkTurn('Next page',1,'Second page')
  await p.setViewportSize({width:386,height:678})
  await p.waitForFunction(()=>document.querySelector('.fb-root')?.dataset.layout==='narrow')
- await checkTurn('Previous page',-1,'right','A notebook page')
- await checkTurn('Next page',1,'left','Second page')
+ await checkTurn('Previous page',-1,'A notebook page')
+ await checkTurn('Next page',1,'Second page')
  // Fold while the outgoing leaf is moving: finish navigation, clear temporary styles.
  await button('Previous page').click()
  await p.waitForFunction(()=>window.testTurn?.playState==='paused')
@@ -120,6 +131,7 @@ try{
  await p.waitForFunction(()=>document.querySelector('.fb-root')?.dataset.layout==='wide'&&!document.querySelector('.fb-spread').hasAttribute('data-turning'))
  assert.equal(await title.inputValue(),'A notebook page')
  assert.equal(await leaf.evaluate(el=>el.getAnimations().length),0)
+ assert.equal(await p.locator('.fb-paper-curl').count(),0)
  await p.evaluate(()=>delete document.querySelector('.fb-page').animate)
  await p.emulateMedia({reducedMotion:'reduce'})
  await tool('Bookmarks')
@@ -251,7 +263,7 @@ try{
  await p.evaluate(()=>window.fixture.destroy())
  assert.match((await p.evaluate(()=>window.fixture.recover()))[0],/Unsaved local draft/)
  assert.deepEqual(errors,[])
- console.log('PASS: cover; create/write; mark edit and persistence; 386/871 layouts, 3D leaf turns in both directions, reduced motion and resize cancellation, linked All Notes index from cover and Home, offline handwriting, sort, search, heading disclosures and wrapped rows with a mobile theme, floating tools without reflow, forced single, overlapping dock; bookmarks; appearance; metadata-safe save, external conflict and recovery; no browser errors.')
+ console.log('PASS: cover; create/write; mark edit and persistence; 386/871 layouts, curved and shaded leaf turns in both directions, reduced motion and resize cancellation, linked All Notes index from cover and Home, offline handwriting, sort, search, heading disclosures and wrapped rows with a mobile theme, floating tools without reflow, forced single, overlapping dock; bookmarks; appearance; metadata-safe save, external conflict and recovery; no browser errors.')
 }finally{
  await browser?.close()
  await new Promise(resolve=>server.close(resolve))

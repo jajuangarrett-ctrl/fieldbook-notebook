@@ -4,6 +4,7 @@ import {defaultKeymap,history,historyKeymap} from "@codemirror/commands"
 import {markdown} from "@codemirror/lang-markdown"
 import {appearance,capture,clip,decodeSidecar,digest,encodeSidecar,headings,kinds,loadMarks,mapMark,numericPageName,parsePage,relocate,safeBookmarks,serialize,cleanTitle,turnDirection,bottomClearance,pageLayout,type Appearance,type Bookmark,type Mark,type MarkKind,type Page} from "./model"
 import type {FileStore} from "./store"
+import {curlFrames} from "./curl"
 
 const setDeco=StateEffect.define<DecorationSet>()
 const liveDeco=StateField.define<DecorationSet>({create:()=>Decoration.none,update(value,tr){let d=value.map(tr.changes);for(const e of tr.effects)if(e.is(setDeco))d=e.value;return d},provide:f=>EditorView.decorations.from(f)})
@@ -100,6 +101,7 @@ export class NotebookUI {
  private positions=new Map<string,{offset:number;end:number;top:number}>()
  private turnStart:{id:number;x:number;y:number;t:number}|null=null
  private leafTurn?:Animation
+ private rollTurn?:Animation
  private conflict=false
  private active=false
  private clock=0
@@ -254,7 +256,7 @@ export class NotebookUI {
   const preference=this.appearance.single
   const chosen=pageLayout(box.width,box.height,preference)
   const previous=this.root.dataset.layout
-  if(previous!==chosen)this.leafTurn?.cancel()
+  if(previous!==chosen)this.cancelCurl()
   this.root.dataset.layout=chosen
   this.pageLayoutButton.textContent=preference?"Auto spread":"1 Page (full width)"
   this.pageLayoutButton.setAttribute("aria-pressed",String(preference))
@@ -364,43 +366,33 @@ export class NotebookUI {
   if(!read||read.id!==page.id)throw Error("The page moved. Reopen it from Contents.")
   if(heading){const h=headings(read.body).filter(r=>r.title===heading);if(h.length===1){offset=h[0].offset;top=undefined}}
   const motion=this.win.matchMedia("(prefers-reduced-motion: reduce)")
-  const canTurn=direction!==undefined&&typeof this.right.animate==="function"&&!motion.matches&&this.active&&!this.book.hidden
+  const canTurn=direction!==undefined&&typeof this.right.animate==="function"&&CSS.supports("clip-path","polygon(0 0,100% 0,0 100%)")&&!motion.matches&&this.active&&!this.book.hidden
   if(!canTurn){
    if(!this.active)return
    await this.load(read,offset,top,heading)
    this.panel=null;this.bookOn();this.refresh()
    return
   }
-  // Animate the real leaf, never clone the Markdown DOM or repeat its embeds.
+  // Keep exactly one real page and one decorative curl. Never clone vault content or embeds.
   const layout=this.root.dataset.layout
-  const edge=layout==="wide"||direction===1?"left":"right"
-  const flat="perspective(1100px) rotateY(0deg)"
-  const tilt=(angle:number)=>"perspective(1100px) rotateY("+angle+"deg)"
-  const origin=edge+" center"
-  const sign=direction===1?-1:1
+  const roll=d(this.spread,"div","fb-paper-curl")
+  roll.setAttribute("aria-hidden","true")
   this.spread.dataset.turning=String(direction)
-  const stop=()=>this.leafTurn?.cancel()
-  motion.addEventListener("change",stop)
+  motion.addEventListener("change",this.cancelCurl)
   try{
-   const outgoing=this.animateLeaf(
-    [{transform:flat,filter:"brightness(1)"},{transform:tilt(sign*83),filter:"brightness(.76)"}],
-    origin,185,"cubic-bezier(.45,.02,.84,.52)")
+   const outgoing=this.animateCurl(roll,direction,false)
    const turned=await outgoing.finished.then(()=>true,()=>false)
    if(!this.active)return
    await this.load(read,offset,top,heading)
    if(!this.active)return
    this.panel=null;this.bookOn();this.refresh()
    const showTurn=turned&&outgoing.playState!=="idle"&&layout===this.root.dataset.layout&&!motion.matches
-   outgoing.cancel()
-   if(showTurn){
-    const incoming=this.animateLeaf(
-     [{transform:tilt(-sign*80),filter:"brightness(.8)"},{transform:flat,filter:"brightness(1)"}],
-     origin,235,"cubic-bezier(.15,.54,.25,1)")
-    await incoming.finished.catch(()=>undefined)
-   }
+   this.cancelCurl()
+   if(showTurn)await this.animateCurl(roll,direction,true).finished.catch(()=>undefined)
   }finally{
-   motion.removeEventListener("change",stop)
-   stop();this.leafTurn=undefined
+   motion.removeEventListener("change",this.cancelCurl)
+   this.cancelCurl();this.leafTurn=undefined;this.rollTurn=undefined
+   roll.remove()
    delete this.spread.dataset.turning
   }
  }
@@ -571,8 +563,15 @@ export class NotebookUI {
   const next=this.bookmarks.some(x=>x.id===p.id)?this.bookmarks.filter(x=>x.id!==p.id):[...this.bookmarks,{id:p.id,offset,heading:visibleHeading??hs[hs.length-1]?.title??null}]
   await this.writeNotebook({bookmarks:next});this.refresh()
  }
- private animateLeaf(frames:Keyframe[],origin:string,duration:number,easing:string){
-  return this.leafTurn=this.right.animate(frames.map(frame=>({...frame,transformOrigin:origin})),{duration,easing,fill:"both"})
+ private cancelCurl=()=>{
+  this.leafTurn?.cancel();this.rollTurn?.cancel()
+ }
+ private animateCurl(roll:HTMLElement,direction:-1|1,incoming:boolean){
+  roll.dataset.curlSide=String(incoming?-direction:direction)
+  const frames=curlFrames(direction,incoming)
+  const time={duration:incoming?205:325,easing:"cubic-bezier(.33,.08,.62,.98)",fill:"both"} as const
+  this.rollTurn=roll.animate(frames.roll,time)
+  return this.leafTurn=this.right.animate(frames.paper,time)
  }
  private async turn(dir:-1|1){
   if(this.mode==="type")return
@@ -770,7 +769,7 @@ export class NotebookUI {
  async destroy(){
   if(this.destroyed)return
   this.active=false
-  this.leafTurn?.cancel()
+  this.cancelCurl()
   this.record()
   try{await this.flush()}catch(e){
    if(this.current&&this.editor&&!this.cfg.recover?.(this.current.id,serialize(this.current,this.title.value,this.editor.state.doc.toString())))this.cfg.notify("Fieldbook closed before a conflicted draft could be saved.")
