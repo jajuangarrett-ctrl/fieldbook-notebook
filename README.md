@@ -1,6 +1,6 @@
 # Fieldbook Notebook for Obsidian
 
-Fieldbook 0.1.2 is a TypeDraw-inspired, non-desktop-only prototype built to the Fieldbook v2 mockup. It is a separate Obsidian plugin; it does not change or depend on FJG File Focus, Vault Control Center, Objectives, or Excalidraw.
+Fieldbook 0.1.3 is a TypeDraw-inspired, non-desktop-only prototype built to the Fieldbook v2 mockup. It is a separate Obsidian plugin; it does not change or depend on FJG File Focus, Vault Control Center, Objectives, or Excalidraw.
 
 ## Use
 
@@ -17,7 +17,7 @@ Open **Fieldbook Notebook: Open Fieldbook** from the command palette or use the 
 
 ## Data and recovery
 
-Pages are ordinary Markdown in the notebook's `Pages/` folder. Stable page IDs, rather than filenames, identify bookmarks and annotations. Bookmarks and style are saved in `Fieldbook Data/Notebook.md`; per-page marks are stored as companion Markdown records in the same folder so they can travel with the notes. These companions may appear in vault search. No network calls, permissions, or telemetry are part of the plugin.
+Pages are ordinary Markdown in the notebook's `Pages/` folder. Stable page IDs, rather than filenames, identify bookmarks and annotations. Bookmarks and style are saved in `Fieldbook Data/Notebook.md`; per-page marks are stored as companion Markdown records in the same folder so they can travel with the notes. These companions may appear in vault search. Extra Obsidian properties on companion files are preserved. An unrecognized settings file is left untouched and does not block folder reading. No network calls, permissions, or telemetry are part of the plugin.
 
 Edits to unrelated frontmatter on a managed page no longer block a compatible save; Fieldbook preserves them. When Fieldbook detects it would overwrite an outside text edit, it keeps the draft open instead. Use **Copy draft**, then explicitly reload when ready. If a conflicted tab is closed, Fieldbook tries to keep the Markdown draft in device-local app storage; use **Fieldbook Notebook: Copy Fieldbook recovery drafts**. Do not clear the app's data while recovering it. Physical-device sync behavior is not yet verified; test changes in a disposable notebook first.
 

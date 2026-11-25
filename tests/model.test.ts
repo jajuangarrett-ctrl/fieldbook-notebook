@@ -90,3 +90,13 @@ test("single layout at folded and portrait sizes; dock inset only for actual ove
  assert.equal(bottomClearance(pane,[{left:48,right:338,top:682,bottom:728}]),0)
  assert.equal(bottomClearance(pane,[{left:400,right:430,top:615,bottom:672}]),0)
 })
+test("Fieldbook metadata round-trips with other Obsidian properties in any order",()=>{
+ const original="\uFEFF---\r\ntitle: Notebook\r\nfieldbook-sidecar: 1\r\nlocation: 'Fieldbook Notebook/Fieldbook Data'\r\ntags: []\r\n---\r\n\r\n```fieldbook-json\r\n{}\r\n```\r\n"
+ assert.deepEqual(decodeSidecar(original),{})
+ const saved=encodeSidecar({bookmarks:[]},original)
+ assert.equal(saved.split("```fieldbook-json")[0],original.split("```fieldbook-json")[0])
+ assert.deepEqual(decodeSidecar(saved),{bookmarks:[]})
+ assert.throws(()=>encodeSidecar({},original.replace('fieldbook-sidecar: 1','fieldbook-sidecar: 2')))
+ assert.throws(()=>encodeSidecar({},original.replace('fieldbook-sidecar: 1','fieldbook-sidecar: 1\r\nfieldbook-sidecar: 1')))
+ assert.equal(folderPage(original,"Folder/Notebook.md",1),null)
+})

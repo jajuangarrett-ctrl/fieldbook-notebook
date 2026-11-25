@@ -63,6 +63,7 @@ export class NotebookUI {
  private addedButton!:HTMLButtonElement
  private appearance=appearance(null)
  private metaRaw:string|null=null
+ private metaAvailable=true
  private markRaw:string|null=null
  private marks:Mark[]=[]
  private bookmarks:Bookmark[]=[]
@@ -170,13 +171,12 @@ export class NotebookUI {
  async init(startOpen=false){
   this.active=true
   await this.run(async()=>{
-   this.metaRaw=await this.store.read(this.store.meta())
-   this.notebookRecord=decodeSidecar(this.metaRaw)
-   this.appearance=appearance(this.notebookRecord.appearance)
-   this.bookmarks=safeBookmarks(this.notebookRecord.bookmarks)
+   try{this.applyNotebookRecord(await this.store.read(this.store.meta()))}
+   catch{this.metaAvailable=false}
    this.lastSession=this.cfg.readSession()
    this.pages=await this.store.list();this.applyAppearance();this.layout();this.refresh()
    if(startOpen)await this.openCover()
+   if(!this.metaAvailable)this.showStatus("Notebook settings could not be read. Pages are still available; the settings file was not changed.")
   })
  }
  recheck(){
@@ -199,9 +199,11 @@ export class NotebookUI {
       else await this.load(changed,this.editor?.state.selection.main.head,this.reader?.scrollTop)
      }
     }
-    const latest=await this.store.read(this.store.meta())
-    if(latest!==this.metaRaw&&this.panel!=="appearance"){
-     const v=decodeSidecar(latest);this.metaRaw=latest;this.notebookRecord=v;this.appearance=appearance(v.appearance);this.bookmarks=safeBookmarks(v.bookmarks);this.applyAppearance()
+    if(this.panel!=="appearance"){
+     try{
+      const latest=await this.store.read(this.store.meta())
+      if(latest!==this.metaRaw||!this.metaAvailable)this.applyNotebookRecord(latest)
+     }catch{this.metaAvailable=false}
     }
     if(this.panel!=="appearance")this.refresh()
    }catch(e){this.report(e)}
@@ -462,7 +464,7 @@ export class NotebookUI {
     }
     if(this.markDirty){
      const meta=decodeSidecar(this.markRaw)
-     const marksRaw=encodeSidecar({...meta,basis:digest(b),marks:this.marks.map(m=>m.state==="placed"&&b.slice(m.from,m.to)!==m.quote?{...m,state:"review"}:m)})
+     const marksRaw=encodeSidecar({...meta,basis:digest(b),marks:this.marks.map(m=>m.state==="placed"&&b.slice(m.from,m.to)!==m.quote?{...m,state:"review"}:m)},this.markRaw)
      // Avoid saving ranges against a newer in-memory edit.
      if(tick===this.clock){
       await this.store.write(this.store.meta(p.id),this.markRaw,marksRaw)
@@ -473,10 +475,15 @@ export class NotebookUI {
    }catch(e){this.conflict=true;throw e}
   })
  }
+ private applyNotebookRecord(raw:string|null){
+  const v=decodeSidecar(raw)
+  this.metaRaw=raw;this.metaAvailable=true;this.notebookRecord=v;this.appearance=appearance(v.appearance);this.bookmarks=safeBookmarks(v.bookmarks);this.applyAppearance()
+ }
  private async writeNotebook(patch:{appearance?:Appearance;bookmarks?:Bookmark[]}){
   return this.enqueue(async()=>{
+   if(!this.metaAvailable)throw Error("Notebook settings could not be read. Existing file left alone.")
    const next={...this.notebookRecord,...patch}
-   const raw=encodeSidecar(next);await this.store.write(this.store.meta(),this.metaRaw,raw)
+   const raw=encodeSidecar(next,this.metaRaw);await this.store.write(this.store.meta(),this.metaRaw,raw)
    this.metaRaw=raw;this.notebookRecord=next
    if(patch.appearance)this.appearance=patch.appearance
    if(patch.bookmarks)this.bookmarks=patch.bookmarks

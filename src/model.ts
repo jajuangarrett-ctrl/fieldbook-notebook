@@ -57,13 +57,21 @@ export function mapMark(s:string,m:Mark,map:(p:number,assoc:number)=>number,undo
 }
 export function numericPageName(p:Page){return String(p.number).padStart(2,"0")}
 export function validateFolder(s:string){return !!s && !s.startsWith("/") && !s.includes("\\") && s.split("/").every(v=>!!v && !v.startsWith(".") && !/[\u0000-\u001f:#?*<>|"]/u.test(v) && v.trim()===v)}
-export function encodeSidecar(data:unknown){return "---\nfieldbook-sidecar: 1\n---\n\n```fieldbook-json\n"+JSON.stringify(data,null,2)+"\n```\n"}
-export function decodeSidecar(raw:string|null):Record<string,unknown>{
- if(raw===null)return {}
- const m=/^---\r?\nfieldbook-sidecar: 1\r?\n---\r?\n\s*```fieldbook-json\r?\n([\s\S]*?)\r?\n```\s*$/.exec(raw)
- if(!m)throw Error("Fieldbook metadata is not recognized. Existing file left alone.")
- const p:unknown=JSON.parse(m[1]);if(!p||typeof p!=="object"||Array.isArray(p))throw Error("Invalid Fieldbook metadata.");return p as Record<string,unknown>
+function sidecarParts(raw:string){
+ const m=/^\uFEFF?---[ \t]*\r?\n([\s\S]*?)\r?\n---[ \t]*\r?\n/.exec(raw)
+ const marker=m?.[1].split(/\r?\n/).filter(line=>/^fieldbook-sidecar[ \t]*:/.test(line))
+ const body=m?/^\s*```fieldbook-json[ \t]*\r?\n([\s\S]*?)\r?\n```\s*$/.exec(raw.slice(m[0].length)):null
+ if(!m||marker?.length!==1||!/^fieldbook-sidecar[ \t]*:[ \t]*1[ \t]*$/.test(marker[0])||!body)throw Error("Fieldbook metadata is not recognized. Existing file left alone.")
+ const data:unknown=JSON.parse(body[1])
+ if(!data||typeof data!=="object"||Array.isArray(data))throw Error("Invalid Fieldbook metadata. Existing file left alone.")
+ return {header:m[0],data:data as Record<string,unknown>}
 }
+export function encodeSidecar(data:unknown,original:string|null=null){
+ const header=original===null?"---\nfieldbook-sidecar: 1\n---\n":sidecarParts(original).header
+ const eol=header.includes("\r\n")?"\r\n":"\n"
+ return header+eol+"```fieldbook-json"+eol+JSON.stringify(data,null,2).replace(/\n/g,eol)+eol+"```"+eol
+}
+export function decodeSidecar(raw:string|null):Record<string,unknown>{return raw===null?{}:sidecarParts(raw).data}
 export function loadMarks(raw:unknown):Mark[] {
  return Array.isArray(raw)?raw.filter((m):m is Mark=>m&&validID(m.id)&&kinds.includes(m.kind)&&Number.isSafeInteger(m.from)&&Number.isSafeInteger(m.to)&&m.from>=0&&m.to>=m.from&&typeof m.quote==="string"&&typeof m.before==="string"&&typeof m.after==="string"&&["placed","review"].includes(m.state)):[]
 }
@@ -94,7 +102,7 @@ export function isFolderNote(path:string,folder:string):boolean{
  return !!rest&&/\.md$/i.test(rest)&&!(/\.excalidraw\.md$/i.test(rest)||rest.split("/").some(s=>s.startsWith(".")||s==="Fieldbook Data"))
 }
 export function folderPage(raw:string,path:string,number:number,mtime=0):Page|null{
- if(/^---\r?\nfieldbook-sidecar: /m.test(raw.slice(0,180)))return null
+ if(/^\uFEFF?---\r?\n[\s\S]*?\r?\n---(?:\r?\n|$)/.exec(raw)?.[0].split(/\r?\n/).some(l=>/^fieldbook-sidecar[ \t]*:/.test(l)))return null
  const body=raw.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/,"").replace(/^\r?\n/,"")
  const filename=path.split("/").pop()?.replace(/\.md$/i,"")??"Untitled"
  return {id:folderNoteID(path),number,path,title:filename,header:"",body,raw,mtime}
