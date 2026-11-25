@@ -23,7 +23,6 @@
 .fb-root .fb-open-cover{color:#f8e8c8;text-align:left;padding-left:0}
 .fb-root .fb-book{height:100%;min-height:0;display:flex;flex-direction:column;padding-bottom:var(--fb-keyboard);overflow:hidden}
 .fb-root .fb-top,.fb-root .fb-foot{display:flex;gap:3px;align-items:center;justify-content:center;flex:0 0 auto;background:var(--fb-bg)}
-.fb-root .fb-top{padding:3px max(4px,env(safe-area-inset-right)) 3px max(4px,env(safe-area-inset-left));border-bottom:1px solid #5262502b}
 .fb-root .fb-foot{padding:3px max(4px,env(safe-area-inset-right)) max(3px,env(safe-area-inset-bottom)) max(4px,env(safe-area-inset-left));border-top:1px solid #5262502b;justify-content:space-evenly}
 .fb-root :is(.fb-top,.fb-foot) button{padding-inline:clamp(5px,2vw,13px)}
 .fb-root .fb-spread{position:relative;flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr);isolation:isolate}
@@ -76,7 +75,7 @@
 .fb-root .fb-status{position:absolute;z-index:5;inset:auto 8px 54px;border:1px solid #ba9e81;background:#fff1d5;color:#48291f;padding:10px;border-radius:10px;box-shadow:0 3px 20px #34221233;font-size:13px}
 .fb-root .fb-status span{display:block;overflow-wrap:anywhere}
 .fb-root[data-empty=true] :is(.fb-title,.fb-body){visibility:hidden}
-.fb-root[data-empty=true] .fb-page::after{content:"Choose a page from Contents, or tap ＋ to start.";position:absolute;top:30%;left:14%;right:14%;text-align:center;font:21px/1.4 Georgia,serif}
+.fb-root[data-empty=true] .fb-page::after{content:"Choose a page from Contents, or use Notebook tools to add one.";position:absolute;top:30%;left:14%;right:14%;text-align:center;font:21px/1.4 Georgia,serif}
 @media(prefers-reduced-motion:reduce){.fb-root *, .fb-root *::before{animation-duration:.001ms!important;transition-duration:.001ms!important}}
 .fb-root .fb-read-heading{font-weight:700}
 .fb-root .fb-read-h1,.fb-root .fb-read-h2{color:var(--fb-ink);letter-spacing:.008em}
@@ -86,10 +85,8 @@
 .fb-root .fb-book{padding-bottom:var(--fb-bottom)}
 .fb-root .fb-cover-screen{padding-bottom:max(16px,var(--fb-dock),env(safe-area-inset-bottom))}
 .fb-root .fb-status{bottom:calc(54px + var(--fb-bottom));max-height:45%;overflow:auto}
-.fb-root .fb-top{justify-content:space-evenly;gap:0;padding-top:0;padding-bottom:0}
 .fb-root[data-layout=wide] .fb-spread{padding:0;gap:2px}
 .fb-root[data-layout=wide] .fb-facing,.fb-root[data-layout=wide] .fb-page{border-radius:0}
-.fb-root .fb-source-chip{flex:0 0 auto;font:600 11px system-ui;padding:3px 14px 4px;background:#dbe7dc;color:#204438;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
 .fb-root .fb-source-reader{height:100%;overflow:auto;overscroll-behavior:contain;padding:0 0 32px;color:var(--fb-ink);font:var(--fb-font-size)/1.6 var(--fb-font);overflow-wrap:anywhere}
 .fb-root .fb-source-reader :is(h1,h2,h3,h4,h5,h6,p,li){color:inherit;font-family:inherit}
 .fb-root .fb-source-reader :is(img,video){max-width:100%}
@@ -97,6 +94,21 @@
 .fb-root[data-source=true][data-empty=true] .fb-page::after{content:"Choose a Markdown note from Contents."}
 .fb-root[data-source=true] .fb-foot{justify-content:space-between}
 .fb-root[data-paper=cream] .fb-source-reader{background:var(--fb-paper)}
-.fb-root .fb-top{overflow-x:auto;justify-content:safe center;scrollbar-width:none}
-.fb-root .fb-top::-webkit-scrollbar{display:none}
 .fb-root .fb-choose-cover{background:#dbe7dc}
+/* Focused notebook: the paper owns the pane; the optional controls float above it. */
+.fb-root {--fb-float-bottom:calc(var(--fb-bottom) + 5px);--fb-float-right:max(9px,env(safe-area-inset-right));}
+.fb-root .fb-book{position:relative;background:var(--fb-paper)}
+.fb-root .fb-foot{position:absolute;right:var(--fb-float-right);bottom:var(--fb-float-bottom);z-index:4;padding:0;gap:0;border:1px solid #9c8e6c5c;background:var(--fb-paper);border-radius:24px;box-shadow:0 2px 10px #18251d2b}
+.fb-root .fb-foot button{border-radius:22px;min-width:44px!important;min-height:44px}
+.fb-root .fb-foot .fb-tools-toggle{letter-spacing:.12em}
+.fb-root .fb-tools{position:absolute;right:var(--fb-float-right);bottom:calc(var(--fb-float-bottom) + 50px);z-index:5;width:min(305px,calc(100% - var(--fb-float-right) - 10px));max-height:max(92px,calc(100% - var(--fb-bottom) - 62px));overflow:auto;overscroll-behavior:contain;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:3px;padding:8px;border:1px solid #aaa07f;background:var(--fb-paper);border-radius:14px;box-shadow:0 6px 24px #192b2050}
+.fb-root .fb-tools-heading,.fb-root .fb-tools-folder{grid-column:1/-1;padding:3px 6px;font:700 13px/1.35 system-ui}
+.fb-root .fb-tools-folder{opacity:.75;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fb-root .fb-tools button{padding:0 7px;text-align:left;white-space:normal;line-height:1.15;border:1px solid #9c8e6c44;font-size:13px}
+.fb-root .fb-tools button:hover{border-color:#93a38c}
+.fb-root .fb-source-reader{padding-bottom:63px}
+.fb-root .cm-content{padding-bottom:63px}
+.fb-root[data-mode=type] .fb-typebar{margin-bottom:55px}
+.fb-root[data-layout=narrow][data-panel=true] .fb-facing{bottom:51px}
+.fb-root[data-layout=narrow][data-mode=type][data-panel=true] .fb-facing{bottom:102px}
+.fb-root .fb-status{z-index:6;bottom:calc(var(--fb-bottom) + 55px)}

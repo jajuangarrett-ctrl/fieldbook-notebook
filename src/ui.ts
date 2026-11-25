@@ -27,7 +27,8 @@ export class NotebookUI {
  private doc:Document
  private cover:HTMLElement
  private book:HTMLElement
- private top:HTMLElement
+ private tools:HTMLElement
+ private toolsToggle!:HTMLButtonElement
  private spread:HTMLElement
  private left:HTMLElement
  private right:HTMLElement
@@ -55,7 +56,6 @@ export class NotebookUI {
  private current:Page|null=null
  private reader?:HTMLElement
  private cleanupReader?:()=>void
- private folderChip!:HTMLElement
  private pageLayoutButton!:HTMLButtonElement
  private dock?:Element
  private dockWatch?:MutationObserver
@@ -103,18 +103,27 @@ export class NotebookUI {
   leather.addEventListener("pointerup",e=>{if(coverStart!==null&&coverStart-e.clientX>60&&e.target!==enter)void this.run(()=>this.openCover());coverStart=null})
   leather.addEventListener("pointercancel",()=>{coverStart=null})
   this.book=d(this.root,"div","fb-book");this.book.hidden=true
-  this.top=d(this.book,"div","fb-top")
-  btn(this.top,"‹",()=>this.run(()=>this.showCover()),"Back to cover")
-  this.contentsButton=btn(this.top,"Contents",()=>this.togglePanel("contents"),"Contents")
-  this.bookmarksButton=btn(this.top,"Saved",()=>this.togglePanel("bookmarks"),"Bookmarks")
-  this.appearanceButton=btn(this.top,"Aa",()=>this.togglePanel("appearance"),"Appearance")
-  this.pageLayoutButton=btn(this.top,"1 Page",()=>this.run(async()=>{
+  this.tools=d(this.book,"div","fb-tools")
+  this.tools.hidden=true
+  this.tools.id="fieldbook-tools-"+Math.random().toString(36).slice(2)
+  this.tools.setAttribute("role","group");this.tools.setAttribute("aria-label","Fieldbook tools")
+  d(this.tools,"div","fb-tools-heading","Notebook tools")
+  if(store.sourceFolder){const folder=d(this.tools,"div","fb-tools-folder",store.sourceFolder);folder.title=store.sourceFolder}
+  const tool=(caption:string,fn:()=>unknown,label?:string,cls="")=>btn(this.tools,caption,()=>{this.hideTools();return fn()},label,cls)
+  tool("Back to cover",()=>this.run(()=>this.showCover()),"Back to cover")
+  this.contentsButton=tool("Contents",()=>this.togglePanel("contents"),"Contents")
+  this.bookmarksButton=tool("Saved pages",()=>this.togglePanel("bookmarks"),"Bookmarks")
+  this.appearanceButton=tool("Appearance",()=>this.togglePanel("appearance"),"Appearance")
+  this.pageLayoutButton=tool("1 Page",()=>this.run(async()=>{
    await this.writeNotebook({appearance:{...this.appearance,single:!this.appearance.single}})
    this.applyAppearance();this.layout()
   }),"Toggle single page","fb-layout-toggle")
-  if(cfg.choose)btn(this.top,"Folder",cfg.choose,"Choose folder")
-  this.openButton=btn(this.top,"↗",()=>this.run(async()=>{await this.flush();if(this.current)await this.store.open(this.current.path)}),"Open as a normal Obsidian note")
-  this.folderChip=d(this.book,"div","fb-source-chip",store.sourceFolder??"");this.folderChip.hidden=!store.sourceFolder
+  if(cfg.choose)tool("Choose folder",cfg.choose,"Choose folder")
+  this.openButton=tool("Open in Obsidian ↗",()=>this.run(async()=>{await this.flush();if(this.current)await this.store.open(this.current.path)}),"Open as a normal Obsidian note")
+  this.typeButton=tool("Type",()=>this.run(()=>this.setMode(this.mode==="type"?"read":"type")),"Type or finish editing")
+  this.markButton=tool("Text marks",()=>this.togglePanel("marks"),"Text marks")
+  this.addedButton=tool("＋ New page",()=>this.run(()=>this.append()),"New page")
+  this.addedButton.hidden=!!store.sourceFolder
   this.spread=d(this.book,"div","fb-spread")
   this.left=d(this.spread,"aside","fb-facing")
   this.right=d(this.spread,"section","fb-page")
@@ -129,12 +138,14 @@ export class NotebookUI {
    const k=btn(this.mini,name,action);k.addEventListener("pointerdown",e=>e.preventDefault())
   }
   this.foot=d(this.book,"div","fb-foot")
-  this.prev=btn(this.foot,"‹",()=>this.run(()=>this.turn(-1)),"Previous page")
-  this.typeButton=btn(this.foot,"Type",()=>this.run(()=>this.setMode(this.mode==="type"?"read":"type")),"Type or finish editing")
-  this.markButton=btn(this.foot,"Marks",()=>this.togglePanel("marks"),"Text marks")
-  this.next=btn(this.foot,"›",()=>this.run(()=>this.turn(1)),"Next page")
-  this.addedButton=btn(this.foot,"＋",()=>this.run(()=>this.append()),"New page")
-  this.addedButton.hidden=!!store.sourceFolder
+  this.prev=btn(this.foot,"‹",()=>{this.hideTools();return this.run(()=>this.turn(-1))},"Previous page")
+  this.next=btn(this.foot,"›",()=>{this.hideTools();return this.run(()=>this.turn(1))},"Next page")
+  this.toolsToggle=btn(this.foot,"•••",()=>{if(this.tools.hidden)this.showTools();else this.hideTools()},"Notebook tools","fb-tools-toggle")
+  this.toolsToggle.setAttribute("aria-controls",this.tools.id)
+  this.toolsToggle.setAttribute("aria-expanded","false")
+  this.book.append(this.tools)
+  this.doc.addEventListener("pointerdown",this.outsideTools)
+  this.root.addEventListener("keydown",this.escapeTools)
   this.gutter=d(this.right,"div","fb-gutter");this.gutter.setAttribute("aria-hidden","true")
   this.gutter.addEventListener("pointerdown",e=>{if(this.mode!=="read"||!this.appearance.swipe||e.pointerType==="mouse"||!e.isPrimary)return;this.turnStart={id:e.pointerId,x:e.clientX,y:e.clientY,t:e.timeStamp};this.gutter.setPointerCapture(e.pointerId)})
   this.gutter.addEventListener("pointerup",e=>{const a=this.turnStart;this.turnStart=null;if(!a||a.id!==e.pointerId)return;const direction=turnDirection(e.clientX-a.x,e.clientY-a.y,e.timeStamp-a.t);if(direction)void this.run(()=>this.turn(direction))})
@@ -196,6 +207,22 @@ export class NotebookUI {
    }catch(e){this.report(e)}
   })},230)
  }
+ private showTools(){
+  this.tools.hidden=false;this.toolsToggle.setAttribute("aria-expanded","true")
+  // Preserve the editor selection for the Text marks command.
+ }
+ private hideTools(){
+  this.tools.hidden=true;this.toolsToggle?.setAttribute("aria-expanded","false")
+ }
+ private outsideTools=(e:PointerEvent)=>{
+  if(this.tools.hidden)return
+  const path=e.composedPath()
+  if(!path.includes(this.tools)&&!path.includes(this.toolsToggle))this.hideTools()
+ }
+ private escapeTools=(e:KeyboardEvent)=>{
+  if(e.key!=="Escape"||this.tools.hidden)return
+  e.preventDefault();e.stopPropagation();this.hideTools();this.toolsToggle.focus()
+ }
  private queueLayout=()=>{
   if(this.layoutFrame||this.destroyed)return
   this.layoutFrame=this.win.requestAnimationFrame(()=>{this.layoutFrame=0;this.layout()})
@@ -206,7 +233,7 @@ export class NotebookUI {
   const chosen=pageLayout(box.width,box.height,preference)
   const previous=this.root.dataset.layout
   this.root.dataset.layout=chosen
-  this.pageLayoutButton.textContent=preference?"Auto":"1 Page"
+  this.pageLayoutButton.textContent=preference?"Auto spread":"1 Page (full width)"
   this.pageLayoutButton.setAttribute("aria-pressed",String(preference))
   if(previous!==chosen&&this.panel===null)this.renderPanel()
   const node=this.cfg.mobile?this.doc.querySelector(".mobile-navbar"):null
@@ -261,7 +288,7 @@ export class NotebookUI {
  }
  private report(e:unknown){this.showStatus(e instanceof Error?e.message:String(e),this.conflict);this.cfg.notify("Fieldbook couldn’t complete that action.")}
  private hideStatus(){this.status.hidden=true;this.status.replaceChildren()}
- private async showCover(){await this.flush();this.record();this.book.hidden=true;this.cover.hidden=false;this.hideStatus()}
+ private async showCover(){this.hideTools();await this.flush();this.record();this.book.hidden=true;this.cover.hidden=false;this.hideStatus()}
  private bookOn(){this.cover.hidden=true;this.book.hidden=false;this.layout()}
  private async openCover(){
   this.bookOn()
@@ -604,6 +631,8 @@ export class NotebookUI {
   if(this.sessionTimer)clearTimeout(this.sessionTimer)
   this.win.visualViewport?.removeEventListener("resize",this.keyboard)
   this.win.visualViewport?.removeEventListener("scroll",this.keyboard)
+  this.doc.removeEventListener("pointerdown",this.outsideTools)
+  this.root.removeEventListener("keydown",this.escapeTools)
   this.root.remove()
  }
 }
