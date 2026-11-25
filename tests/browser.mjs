@@ -157,6 +157,26 @@ try{
  await button('Reverse page order').click()
  assert.equal(await p.locator('.fb-toc-title').first().textContent(),'Second page')
  assert.equal(await p.locator('.fb-toc-number').first().textContent(),'2')
+ // Mobile Obsidian themes can set a fixed global button height even if content wraps,
+ // and paint a dark fill over Fieldbook's light search pill.
+ const hostTheme=await p.addStyleTag({content:`
+  body button { height: 36px !important; max-height: 44px !important; white-space: nowrap !important; }
+  body input[type=search] { background: #101940 !important; color: #bccbf9 !important; }
+ `})
+ const longTitle='A long meeting note title that wraps across several lines when the notebook is unfolded or folded'
+ const titleBefore=await p.locator('.fb-toc-title').first().textContent()
+ await p.locator('.fb-toc-title').first().evaluate((el,t)=>{el.textContent=t},longTitle)
+ for(const width of [386,871]){
+  await p.setViewportSize({width,height:678})
+  const rows=p.locator('.fb-toc-line'), first=await rows.nth(0).boundingBox(), second=await rows.nth(1).boundingBox()
+  const wrapped=await p.locator('.fb-toc-title').first().boundingBox()
+  assert.ok(first.height>46&&first.y+first.height<=second.y+.5,'Wrapped list rows must expand, not overlap')
+  assert.ok(wrapped.y>=first.y&&wrapped.y+wrapped.height<=first.y+first.height+.5,'Title must stay inside its row')
+  assert.equal(await search.evaluate(e=>getComputedStyle(e).backgroundColor),'rgba(0, 0, 0, 0)','Search must stay clear inside the light pill')
+ }
+ await p.locator('.fb-toc-title').first().evaluate((el,t)=>{el.textContent=t},titleBefore)
+ await hostTheme.evaluate(e=>e.remove())
+ await p.setViewportSize({width:386,height:678})
  await search.fill('Not present')
  await p.getByText('No matching notes or headings.').waitFor()
  await search.fill('NEXT STEPS')
@@ -231,7 +251,7 @@ try{
  await p.evaluate(()=>window.fixture.destroy())
  assert.match((await p.evaluate(()=>window.fixture.recover()))[0],/Unsaved local draft/)
  assert.deepEqual(errors,[])
- console.log('PASS: cover; create/write; mark edit and persistence; 386/871 layouts, 3D leaf turns in both directions, reduced motion and resize cancellation, linked All Notes index from cover and Home, offline handwriting, sort, search and heading disclosures, floating tools without reflow, forced single, overlapping dock; bookmarks; appearance; metadata-safe save, external conflict and recovery; no browser errors.')
+ console.log('PASS: cover; create/write; mark edit and persistence; 386/871 layouts, 3D leaf turns in both directions, reduced motion and resize cancellation, linked All Notes index from cover and Home, offline handwriting, sort, search, heading disclosures and wrapped rows with a mobile theme, floating tools without reflow, forced single, overlapping dock; bookmarks; appearance; metadata-safe save, external conflict and recovery; no browser errors.')
 }finally{
  await browser?.close()
  await new Promise(resolve=>server.close(resolve))
