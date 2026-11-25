@@ -1,0 +1,75 @@
+export const DEFAULT = {title:"Fieldbook", label:"FJG / VAULT", open:"resume", paper:"cream", ruling:"lined", ink:"green", type:"serif", size:20, swipe:false} as const
+export type Appearance = {title:string; label:string; open:"resume"|"latest"|"contents"|"new"; paper:"cream"|"rose"|"sky"|"contrast"; ruling:"lined"|"grid"|"dotted"|"plain"; ink:"green"|"black"|"blue"|"umber"; type:"serif"|"sans"|"script"; size:number; swipe:boolean}
+export type Page = {id:string; number:number; path:string; title:string; header:string; body:string; raw:string; mtime:number}
+export type Bookmark = {id:string; offset:number; heading:string|null}
+export type MarkKind = "highlight"|"underline"|"strike"|"circle"
+export type Mark = {id:string; kind:MarkKind; from:number; to:number; quote:string; before:string; after:string; state:"placed"|"review"}
+export const kinds:MarkKind[]=["highlight","underline","strike","circle"]
+export const validID=(s:unknown):s is string=>typeof s==="string"&&/^[a-f0-9-]{24,40}$/.test(s)
+export const cleanTitle=(s:string)=>s.replace(/[\r\n]+/g," ").trim().slice(0,120)||"Untitled page"
+export function appearance(raw:unknown):Appearance {
+ const a=(raw && typeof raw==="object"?raw:{}) as Record<string,unknown>
+ const one=<T extends string>(k:string, vs:readonly T[], d:T):T=>vs.includes(a[k] as T)?a[k] as T:d
+ return {title:typeof a.title==="string"?cleanTitle(a.title):DEFAULT.title,label:typeof a.label==="string"?a.label.replace(/[\r\n]/g," ").slice(0,50):DEFAULT.label,
+ open:one("open",["resume","latest","contents","new"],"resume"),paper:one("paper",["cream","rose","sky","contrast"],"cream"),ruling:one("ruling",["lined","grid","dotted","plain"],"lined"),
+ ink:one("ink",["green","black","blue","umber"],"green"),type:one("type",["serif","sans","script"],"serif"),
+ size:typeof a.size==="number"&&Number.isFinite(a.size)?Math.min(30,Math.max(16,a.size)):20, swipe:a.swipe===true}
+}
+export function parsePage(raw:string,path:string,mtime=0):Page|null {
+ const m=/^(---\r?\n[\s\S]*?\r?\n---\r?\n)([\s\S]*)$/.exec(raw);if(!m)return null
+ const id=/^fieldbook-page-id:\s*([a-f0-9-]+)[ \t]*\r?$/m.exec(m[1])?.[1]
+ const n=Number(/^fieldbook-page-order:\s*(\d+)[ \t]*\r?$/m.exec(m[1])?.[1])
+ if(!validID(id)||!Number.isSafeInteger(n)||n<1)return null
+ const contents=m[2].replace(/^\r?\n/,"")
+ const h=/^# ([^\r\n]+)(?:\r?\n|$)/.exec(contents)
+ return {id,number:n,path,title:h?.[1]??path.split("/").pop()?.replace(/\.md$/,"")??"Untitled",header:m[1],body:h?contents.slice(h[0].length).replace(/^\r?\n/,""):contents,raw,mtime}
+}
+export const serialize=(p:Pick<Page,"header">,title:string,body:string)=>p.header+"\n# "+cleanTitle(title)+"\n\n"+body
+export const newPage=(id:string,n:number,title:string)=>serialize({header:"---\nfieldbook-page-id: "+id+"\nfieldbook-page-order: "+n+"\n---\n"},title,"")
+export const headings=(s:string)=>{const rows=s.split("\n");let at=0,fence="";return rows.flatMap(line=>{const offset=at;at+=line.length+1;const f=/^\s{0,3}(`{3,}|~{3,})/.exec(line);if(f){if(!fence)fence=f[1];else if(f[1][0]===fence[0]&&f[1].length>=fence.length)fence="";return []}const m=!fence?/^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/.exec(line):null;return m?[{offset,title:m[2],level:m[1].length}]:[]})}
+export function digest(s:string){let h=2166136261;for(let i=0;i<s.length;i++)h=Math.imul(h^s.charCodeAt(i),16777619);return (h>>>0).toString(16)+":"+s.length}
+export const clip=(p:number,s:string)=>Math.min(s.length,Math.max(0,Number.isFinite(p)?Math.floor(p):0))
+export function capture(s:string,m:Pick<Mark,"id"|"kind">,from:number,to:number):Mark {
+ from=clip(from,s);to=clip(to,s)
+ return {...m,from,to,quote:s.slice(from,to),before:s.slice(Math.max(0,from-32),from),after:s.slice(to,to+32),state:"placed"}
+}
+export function relocate(s:string,m:Mark,same=false):Mark {
+ if(!m.quote||m.state==="review")return {...m,state:"review"}
+ if(same&&m.state==="placed"&&s.slice(m.from,m.to)===m.quote)return m
+ const hits:number[]=[]
+ for(let i=s.indexOf(m.quote);i>=0;i=s.indexOf(m.quote,i+1)){hits.push(i);if(hits.length>300)return {...m,state:"review"}}
+ let match=hits.length===1?hits[0]:undefined
+ if(hits.length>1){
+  // Never guess on a tied match. Both nonempty adjacent contexts must support a repeated quote.
+  const cand=hits.filter(i=>m.before.trim()&&m.after.trim()&&s.slice(Math.max(0,i-m.before.length),i)===m.before&&s.slice(i+m.quote.length,i+m.quote.length+m.after.length)===m.after)
+  if(cand.length===1)match=cand[0]
+ }
+ return match===undefined?{...m,state:"review"}:capture(s,m,match,match+m.quote.length)
+}
+export function mapMark(s:string,m:Mark,map:(p:number,assoc:number)=>number,undo=false):Mark {
+ if(m.state==="review"){
+  if(undo&&m.quote&&s.slice(m.from,m.to)===m.quote&&s.slice(Math.max(0,m.from-m.before.length),m.from)===m.before&&s.slice(m.to,m.to+m.after.length)===m.after)return capture(s,m,m.from,m.to)
+  return m
+ }
+ const from=map(m.from,1),to=map(m.to,-1)
+ // Keep the saved quote on full deletion for a later undo / review.
+ return from>=to||!s.slice(from,to).trim()?{...m,state:"review"}:capture(s,m,from,to)
+}
+export function numericPageName(p:Page){return String(p.number).padStart(2,"0")}
+export function validateFolder(s:string){return !!s && !s.startsWith("/") && !s.includes("\\") && s.split("/").every(v=>!!v && !v.startsWith(".") && !/[\u0000-\u001f:#?*<>|"]/u.test(v) && v.trim()===v)}
+export function encodeSidecar(data:unknown){return "---\nfieldbook-sidecar: 1\n---\n\n```fieldbook-json\n"+JSON.stringify(data,null,2)+"\n```\n"}
+export function decodeSidecar(raw:string|null):Record<string,unknown>{
+ if(raw===null)return {}
+ const m=/^---\r?\nfieldbook-sidecar: 1\r?\n---\r?\n\s*```fieldbook-json\r?\n([\s\S]*?)\r?\n```\s*$/.exec(raw)
+ if(!m)throw Error("Fieldbook metadata is not recognized. Existing file left alone.")
+ const p:unknown=JSON.parse(m[1]);if(!p||typeof p!=="object"||Array.isArray(p))throw Error("Invalid Fieldbook metadata.");return p as Record<string,unknown>
+}
+export function loadMarks(raw:unknown):Mark[] {
+ return Array.isArray(raw)?raw.filter((m):m is Mark=>m&&validID(m.id)&&kinds.includes(m.kind)&&Number.isSafeInteger(m.from)&&Number.isSafeInteger(m.to)&&m.from>=0&&m.to>=m.from&&typeof m.quote==="string"&&typeof m.before==="string"&&typeof m.after==="string"&&["placed","review"].includes(m.state)):[]
+}
+export function safeBookmarks(raw:unknown):Bookmark[]{
+ return Array.isArray(raw)?raw.filter((b):b is Bookmark=>b&&validID(b.id)&&Number.isSafeInteger(b.offset)&&b.offset>=0&&(b.heading===null||typeof b.heading==="string")):[]
+}
+export function turnDirection(dx:number,dy:number,time:number):number {
+ return Math.abs(dx)>Math.abs(dy)*1.7&&(Math.abs(dx)>=65||(Math.abs(dx)>=38&&Math.abs(dx)/Math.max(1,time)>=0.45))?(dx<0?1:-1):0
+}

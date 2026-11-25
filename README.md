@@ -1,0 +1,46 @@
+# Fieldbook Notebook for Obsidian
+
+Fieldbook 0.1.0 is a TypeDraw-inspired, non-desktop-only prototype built to the Fieldbook v2 mockup. It is a separate Obsidian plugin; it does not change or depend on FJG File Focus, Vault Control Center, Objectives, or Excalidraw.
+
+## Use
+
+Open **Fieldbook Notebook: Open Fieldbook** from the command palette or use the ribbon book icon. Tap the cover, then **＋** to add an actual Markdown page. No notes are created just by opening the view. For a different notebook folder, close Fieldbook first and use its community-plugin settings. The default folder is `Fieldbook Notebook`. Use a new folder for the first trial.
+
+- **Layout:** Single full-width page in a narrow or portrait-shaped view. Wide views show a facing page or contents next to the active page. This measures the Obsidian pane, not an OS hinge sensor.
+- **Navigation:** Contents shows pages and headings. Star a page, then use **Saved** to return. The numbered next/previous controls never create a page. **＋** appends one new Markdown page. The experimental edge turn can be enabled in Appearance; it is off by default and works only in Read mode. Page changes use a short transition, not a physical paper curl.
+- **Writing:** Tap **Type** for the title or Markdown body. Use Checklist, List, or Heading to add Markdown syntax. **Done** dismisses typing. The ↗ button opens the same note in normal Obsidian.
+- **Marks:** In Type mode select text and open **Marks**. Pick highlight, underline, circle or strike. Marks are separate from Markdown and track text edits and wrapping. For an uncertain external edit, open **Marks** to reattach to a new selection or discard. There is no automatic draw-to-mark recognition.
+- **Appearance:** View cover title/label, reopening choice, paper, ruling, ink, typeface, size, and swipe settings. Changes preview immediately; tap **Save** to persist them or **Cancel** to revert.
+
+## Data and recovery
+
+Pages are ordinary Markdown in the notebook's `Pages/` folder. Stable page IDs, rather than filenames, identify bookmarks and annotations. Bookmarks and style are saved in `Fieldbook Data/Notebook.md`; per-page marks are stored as companion Markdown records in the same folder so they can travel with the notes. These companions may appear in vault search. No network calls, permissions, or telemetry are part of the plugin.
+
+When Fieldbook detects it would overwrite an outside edit, it keeps the draft open instead. Use **Copy draft**, then explicitly reload when ready. If a conflicted tab is closed, Fieldbook tries to keep the Markdown draft in device-local app storage; use **Fieldbook Notebook: Copy Fieldbook recovery drafts**. Do not clear the app's data while recovering it. Physical-device sync behavior is not yet verified; test changes in a disposable notebook first.
+
+## Install with BRAT
+
+1. In Obsidian, open **Settings → Community plugins → BRAT**.
+2. Choose **Add beta plugin** and paste `https://github.com/jajuangarrett-ctrl/fieldbook-notebook`.
+3. Choose **Latest version** if prompted and enable **Fieldbook Notebook**. Open **Fieldbook Notebook: Open Fieldbook** from the command palette.
+
+On mobile, BRAT and community plugins must be enabled on that device. This is an early test build. Start in a disposable notebook before using real notes.
+
+## Build and local install
+
+```sh
+npm ci
+npm run typecheck
+npm test
+npm run build
+npm run test:browser
+npm run test:host
+```
+
+Browser tests use a temporary localhost fixture, Microsoft Edge on macOS by default, and a disposable file-store stand-in. Set `BROWSER_BIN` to a Chromium-compatible executable to use another browser. The host smoke test starts Obsidian only with a temporary profile and vault, exercises the installed command, and checks the resulting note. Set `OBSIDIAN_BIN` to override the desktop executable path.
+
+To install manually, extract the packaged `fieldbook-notebook/` folder under the target vault's `.obsidian/plugins/`. It must contain `manifest.json`, `main.js` and `styles.css` directly. Reopen Obsidian, enable **Fieldbook Notebook** in Community plugins, then run **Open Fieldbook**. Do not replace another FJG plugin. For exact device behavior, test it in Obsidian on the physical Duo.
+
+## Not in this build
+
+True paper curl, freehand ink and variable-pressure Pencil validation, photo positioning gestures, automatic drawn-mark detection, and MyScript/Nebo handwriting recognition. The latest verified scope and test results are in the vault build notes.

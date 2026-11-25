@@ -1,0 +1,9 @@
+{
+  "id": "fieldbook-notebook",
+  "name": "Fieldbook Notebook",
+  "version": "0.1.0",
+  "minAppVersion": "1.7.0",
+  "description": "A fold-friendly paper notebook with Markdown pages, bookmarks and text-linked marks.",
+  "author": "Franklin Garrett",
+  "isDesktopOnly": false
+}

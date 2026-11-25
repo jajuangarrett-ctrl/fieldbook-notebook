@@ -1,0 +1,27 @@
+{
+  "name": "fieldbook-obsidian",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "build": "node build.mjs",
+    "test:browser": "node tests/browser.mjs",
+    "test:host": "node tests/host.mjs"
+  },
+  "dependencies": {
+    "@codemirror/commands": "^6.8.1",
+    "@codemirror/lang-markdown": "^6.3.2",
+    "@codemirror/state": "^6.5.2",
+    "@codemirror/view": "^6.36.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "esbuild": "^0.25.2",
+    "obsidian": "^1.8.7",
+    "playwright-core": "^1.52.0",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.3"
+  }
+}
