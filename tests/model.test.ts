@@ -100,3 +100,11 @@ test("Fieldbook metadata round-trips with other Obsidian properties in any order
  assert.throws(()=>encodeSidecar({},original.replace('fieldbook-sidecar: 1','fieldbook-sidecar: 1\r\nfieldbook-sidecar: 1')))
  assert.equal(folderPage(original,"Folder/Notebook.md",1),null)
 })
+
+test("page text upgrades the old stock size but preserves custom sizes",()=>{
+ assert.equal(appearance(null).size,26)
+ assert.equal(appearance({size:20}).size,26)
+ assert.equal(appearance({size:24}).size,24)
+ assert.equal(appearance({size:20,sizeRevision:1}).size,20)
+ assert.deepEqual(appearance(appearance({size:24})),appearance({size:24}))
+})

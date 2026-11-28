@@ -1,6 +1,6 @@
 # Fieldbook Notebook for Obsidian
 
-Fieldbook 0.1.3 is a TypeDraw-inspired, non-desktop-only prototype built to the Fieldbook v2 mockup. It is a separate Obsidian plugin; it does not change or depend on FJG File Focus, Vault Control Center, Objectives, or Excalidraw.
+Fieldbook is a TypeDraw-inspired, non-desktop-only prototype built to the Fieldbook v2 mockup. It is a separate Obsidian plugin; it does not change or depend on FJG File Focus, Vault Control Center, Objectives, or Excalidraw.
 
 ## Use
 
@@ -13,7 +13,7 @@ Open **Fieldbook Notebook: Open Fieldbook** from the command palette or use the 
 - **Navigation:** Contents shows pages and headings. Star a page, then use **Saved** to return. The numbered next/previous controls never create a page. **New page** appends one new Markdown page. The experimental edge turn can be enabled in Appearance; it is off by default and works only in Read mode. Page changes use a short transition, not a physical paper curl.
 - **Writing:** Tap **••• → Type** for the title or Markdown body. Use Checklist, List, or Heading to add Markdown syntax. **Done** dismisses typing. The ↗ button opens the same note in normal Obsidian.
 - **Marks:** In Type mode select text and open **••• → Text marks**. Pick highlight, underline, circle or strike. Marks are separate from Markdown and track text edits and wrapping. For an uncertain external edit, open **••• → Text marks** to reattach to a new selection or discard. There is no automatic draw-to-mark recognition.
-- **Appearance:** View cover title/label, reopening choice, paper, ruling, ink, typeface, size, and swipe settings. Changes preview immediately; tap **Save** to persist them or **Cancel** to revert.
+- **Appearance:** View cover title/label, reopening choice, paper, ruling, ink, typeface, size, and swipe settings. Page text defaults to 26 px in single pages and spreads. The old stock 20 px size adopts the new default; other saved sizes stay unchanged. Use **Text size** to set your preference. Changes preview immediately; tap **Save** to persist them or **Cancel** to revert.
 
 ## Data and recovery
 

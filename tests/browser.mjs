@@ -49,6 +49,8 @@ try{
  assert.equal(await p.locator('.fb-tools').isVisible(),false)
 
  assert.equal(await root.getAttribute('data-layout'),'narrow')
+ assert.equal(await body.evaluate(e=>getComputedStyle(e).fontSize),'26px')
+ assert.ok(parseFloat(await body.evaluate(e=>getComputedStyle(e).lineHeight))>34)
  assert.ok((await p.locator('.fb-page').boundingBox()).width>=380)
  await p.evaluate(()=>{const d=document.createElement('div');d.className='mobile-navbar';d.style.cssText='position:absolute;left:40px;right:40px;bottom:14px;height:48px;z-index:99;background:#030525';document.body.append(d)})
  await p.waitForFunction(()=>Number.parseInt(document.querySelector('.fb-root').style.getPropertyValue('--fb-dock'))>50)
@@ -74,6 +76,8 @@ try{
  assert.ok((await p.locator('.fb-page').boundingBox()).height>=665,'Unfolded spread should fill the pane')
  assert.equal(await p.evaluate(()=>window.fixture.count()),2)
  assert.equal(await p.locator('.fb-facing-title').textContent(),'A notebook page')
+ assert.equal(await body.evaluate(e=>getComputedStyle(e).fontSize),'26px')
+ assert.equal(await p.locator('.fb-facing-text').evaluate(e=>getComputedStyle(e).fontSize),'26px')
  await tool('Toggle single page')
  await p.waitForFunction(()=>document.querySelector('.fb-root')?.dataset.layout==='narrow')
  assert.equal(await title.inputValue(),'Second page')
@@ -201,6 +205,10 @@ try{
  await p.getByLabel('Paper',{exact:true}).selectOption('sky')
  assert.equal(await root.getAttribute('data-paper'),'sky')
  await p.getByLabel('Ruling',{exact:true}).selectOption('dotted')
+ const size=p.getByLabel('Text size',{exact:true})
+ assert.equal(await size.inputValue(),'26')
+ await size.fill('20')
+ assert.equal(await body.evaluate(e=>getComputedStyle(e).fontSize),'20px')
  await button('Save').click()
  await p.evaluate(()=>window.fixture.destroy())
  await p.evaluate(()=>window.fixture.start())
@@ -208,6 +216,7 @@ try{
  await p.locator('.fb-mark-circle').waitFor()
  assert.equal(await root.getAttribute('data-paper'),'sky')
  assert.equal(await root.getAttribute('data-ruling'),'dotted')
+ assert.equal(await body.evaluate(e=>getComputedStyle(e).fontSize),'20px')
  assert.equal(await title.inputValue(),'A notebook page')
  // Same phrase twice: mark only the second, narrow enough that it wraps,
  // change earlier text and verify exactly one mark stays at the second occurrence.

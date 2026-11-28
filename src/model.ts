@@ -1,5 +1,5 @@
-export const DEFAULT = {title:"Fieldbook", label:"FJG / VAULT", open:"resume", paper:"white", ruling:"lined", ink:"blue", type:"script", size:20, swipe:false,single:false} as const
-export type Appearance = {title:string; label:string; open:"resume"|"latest"|"contents"|"new"; paper:"white"|"cream"|"rose"|"sky"|"contrast"; ruling:"lined"|"grid"|"dotted"|"plain"; ink:"green"|"black"|"blue"|"umber"; type:"serif"|"sans"|"script"; size:number; swipe:boolean; single:boolean}
+export const DEFAULT = {title:"Fieldbook", label:"FJG / VAULT", open:"resume", paper:"white", ruling:"lined", ink:"blue", type:"script", size:26, swipe:false,single:false} as const
+export type Appearance = {title:string; label:string; open:"resume"|"latest"|"contents"|"new"; paper:"white"|"cream"|"rose"|"sky"|"contrast"; ruling:"lined"|"grid"|"dotted"|"plain"; ink:"green"|"black"|"blue"|"umber"; type:"serif"|"sans"|"script"; size:number; sizeRevision:1; swipe:boolean; single:boolean}
 export type Page = {id:string; number:number; path:string; title:string; header:string; body:string; raw:string; mtime:number}
 export type Bookmark = {id:string; offset:number; heading:string|null}
 export type MarkKind = "highlight"|"underline"|"strike"|"circle"
@@ -10,10 +10,13 @@ export const cleanTitle=(s:string)=>s.replace(/[\r\n]+/g," ").trim().slice(0,120
 export function appearance(raw:unknown):Appearance {
  const a=(raw && typeof raw==="object"?raw:{}) as Record<string,unknown>
  const one=<T extends string>(k:string, vs:readonly T[], d:T):T=>vs.includes(a[k] as T)?a[k] as T:d
+ // Upgrade the former stock size but honor other saved sizes and explicit choices from this version.
+ const size=typeof a.size==="number"&&Number.isFinite(a.size)&&!(a.size===20&&a.sizeRevision!==1)
+  ?Math.min(30,Math.max(16,a.size)):DEFAULT.size
  return {title:typeof a.title==="string"?cleanTitle(a.title):DEFAULT.title,label:typeof a.label==="string"?a.label.replace(/[\r\n]/g," ").slice(0,50):DEFAULT.label,
  open:one("open",["resume","latest","contents","new"],"resume"),paper:one("paper",["white","cream","rose","sky","contrast"],DEFAULT.paper),ruling:one("ruling",["lined","grid","dotted","plain"],"lined"),
  ink:one("ink",["green","black","blue","umber"],DEFAULT.ink),type:one("type",["serif","sans","script"],DEFAULT.type),
- size:typeof a.size==="number"&&Number.isFinite(a.size)?Math.min(30,Math.max(16,a.size)):20, swipe:a.swipe===true,single:a.single===true}
+ size,sizeRevision:1, swipe:a.swipe===true,single:a.single===true}
 }
 export function parsePage(raw:string,path:string,mtime=0):Page|null {
  const m=/^(---\r?\n[\s\S]*?\r?\n---\r?\n)([\s\S]*)$/.exec(raw);if(!m)return null
