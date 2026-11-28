@@ -540,9 +540,9 @@ export class NotebookUI {
   const v=decodeSidecar(raw)
   this.metaRaw=raw;this.metaAvailable=true;this.notebookRecord=v
   const style=appearance(v.appearance)
-  // Bring forward only the old stock look. Do not replace custom paper or type choices.
-  this.appearance=v.styleRevision!==1&&style.paper==="cream"&&style.ink==="green"&&style.type==="serif"
-   ?{...style,paper:"white",ink:"blue",type:"script"}:style
+  // Bring forward only the old stock paper and ink combination.
+  this.appearance=v.styleRevision!==1&&style.paper==="cream"&&style.ink==="green"&&(v.appearance as Partial<Appearance>|undefined)?.type==="serif"
+   ?{...style,paper:"white",ink:"blue"}:style
   this.bookmarks=safeBookmarks(v.bookmarks);this.applyAppearance()
  }
  private async writeNotebook(patch:{appearance?:Appearance;bookmarks?:Bookmark[]}){
@@ -583,7 +583,8 @@ export class NotebookUI {
  private applyAppearance(){
   const v=this.appearance
   Object.assign(this.root.dataset,{paper:v.paper,ruling:v.ruling,ink:v.ink,font:v.type,swipe:String(v.swipe)})
-  this.root.style.setProperty("--fb-font-size",v.size+"px")
+  if(v.size===null)this.root.style.removeProperty("--fb-font-size")
+  else this.root.style.setProperty("--fb-font-size",v.size+"px")
   this.coverName.textContent=this.store.sourceFolder?.split("/").pop()??v.title;this.coverLabel.textContent=this.store.sourceFolder?"VAULT FOLDER":v.label
   this.applyMode()
  }
@@ -707,10 +708,10 @@ export class NotebookUI {
  }
  private renderAppearance(){
   const saved={...this.appearance}
-  const options=(label:string,items:readonly string[],current:string,change:(s:string)=>void)=>{
+  const options=(label:string,items:readonly string[],current:string,change:(s:string)=>void,names:Record<string,string>={})=>{
    const l=d(this.left,"label","fb-setting",label)
    const sel=d(l,"select","fb-input") as HTMLSelectElement;sel.setAttribute("aria-label",label)
-   for(const item of items){const o=d(sel,"option","",item) as HTMLOptionElement;o.value=item}
+   for(const item of items){const o=d(sel,"option","",names[item]??item) as HTMLOptionElement;o.value=item}
    sel.value=current;sel.addEventListener("change",()=>change(sel.value))
   }
   const set=(k:keyof Appearance,v:unknown)=>{this.appearance=appearance({...this.appearance,[k]:v});this.applyAppearance()}
@@ -721,8 +722,17 @@ export class NotebookUI {
   options("Paper",["white","cream","rose","sky","contrast"],this.appearance.paper,v=>set("paper",v))
   options("Ruling",["lined","grid","dotted","plain"],this.appearance.ruling,v=>set("ruling",v))
   options("Ink",["green","black","blue","umber"],this.appearance.ink,v=>set("ink",v))
-  options("Typeface",["serif","sans","script"],this.appearance.type,v=>set("type",v))
-  const sz=input(d(this.left,"label","fb-setting","Text size"),"Text size",String(this.appearance.size),"range");sz.min="16";sz.max="30";sz.addEventListener("input",()=>set("size",Number(sz.value)))
+  options("Typeface",["obsidian","serif","sans","script"],this.appearance.type,v=>set("type",v),
+   {obsidian:"Obsidian",serif:"Serif",sans:"Sans serif",script:"Handwriting"})
+  const follow=input(d(this.left,"label","fb-setting","Follow Obsidian size (+2 px)"),"Follow Obsidian size","on","checkbox")
+  follow.checked=this.appearance.size===null
+  const manual=d(this.left,"label","fb-setting","Text size")
+  const measured=Number.parseFloat(getComputedStyle(this.root).getPropertyValue("--font-text-size"))
+  const suggested=Number.isFinite(measured)?Math.min(30,Math.max(16,Math.round(measured+2))):18
+  const sz=input(manual,"Text size",String(this.appearance.size??suggested),"range")
+  sz.min="16";sz.max="30";manual.hidden=follow.checked
+  sz.addEventListener("input",()=>set("size",Number(sz.value)))
+  follow.addEventListener("change",()=>{manual.hidden=follow.checked;set("size",follow.checked?null:Number(sz.value))})
   const swipe=input(d(this.left,"label","fb-setting fb-check","Edge swipe (preview)"),"Enable edge swipe","on","checkbox");swipe.checked=this.appearance.swipe;swipe.addEventListener("change",()=>set("swipe",swipe.checked))
   const actions=d(this.left,"div","fb-settings-actions")
   const back=()=>{this.panel=this.appearanceFromIndex?"contents":null;this.appearanceFromIndex=false;this.refresh()}

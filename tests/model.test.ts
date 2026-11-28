@@ -101,10 +101,15 @@ test("Fieldbook metadata round-trips with other Obsidian properties in any order
  assert.equal(folderPage(original,"Folder/Notebook.md",1),null)
 })
 
-test("page text upgrades the old stock size but preserves custom sizes",()=>{
- assert.equal(appearance(null).size,26)
- assert.equal(appearance({size:20}).size,26)
+test("page text follows Obsidian by default and preserves explicit new typography",()=>{
+ assert.equal(appearance(null).size,null)
+ assert.equal(appearance(null).type,"obsidian")
+ assert.equal(appearance({size:20,type:"serif"}).size,null)
+ assert.equal(appearance({size:26,type:"script",sizeRevision:1}).type,"obsidian")
+ assert.equal(appearance({size:26,type:"script",sizeRevision:1}).size,null)
  assert.equal(appearance({size:24}).size,24)
  assert.equal(appearance({size:20,sizeRevision:1}).size,20)
  assert.deepEqual(appearance(appearance({size:24})),appearance({size:24}))
+ assert.equal(appearance({type:"script",size:26,typographyRevision:1}).type,"script")
+ assert.equal(appearance({type:"script",size:26,typographyRevision:1}).size,26)
 })

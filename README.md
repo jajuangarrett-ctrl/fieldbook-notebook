@@ -13,7 +13,7 @@ Open **Fieldbook Notebook: Open Fieldbook** from the command palette or use the 
 - **Navigation:** Contents shows pages and headings. Star a page, then use **Saved** to return. The numbered next/previous controls never create a page. **New page** appends one new Markdown page. The experimental edge turn can be enabled in Appearance; it is off by default and works only in Read mode. Page changes use a short transition, not a physical paper curl.
 - **Writing:** Tap **••• → Type** for the title or Markdown body. Use Checklist, List, or Heading to add Markdown syntax. **Done** dismisses typing. The ↗ button opens the same note in normal Obsidian.
 - **Marks:** In Type mode select text and open **••• → Text marks**. Pick highlight, underline, circle or strike. Marks are separate from Markdown and track text edits and wrapping. For an uncertain external edit, open **••• → Text marks** to reattach to a new selection or discard. There is no automatic draw-to-mark recognition.
-- **Appearance:** View cover title/label, reopening choice, paper, ruling, ink, typeface, size, and swipe settings. Page text defaults to 26 px in single pages and spreads. The old stock 20 px size adopts the new default; other saved sizes stay unchanged. Use **Text size** to set your preference. Changes preview immediately; tap **Save** to persist them or **Cancel** to revert.
+- **Appearance:** View cover title/label, reopening choice, paper, ruling, ink, typeface, size, and swipe settings. Page text defaults to Obsidian’s current note font and is 2 px larger than its normal note text in both single pages and spreads. To set a fixed size, turn off **Follow Obsidian size** and use **Text size**. Changes preview immediately; tap **Save** to persist them or **Cancel** to revert.
 
 ## Data and recovery
 
@@ -52,4 +52,4 @@ Page arrows (and the optional reading edge swipe) turn the active paper leaf wit
 
 **Table of contents** on the cover, the floating **Home** button on any page, or **Contents** in Notebook tools all open a full-page index. Tap a note or one of its headings to open it in Fieldbook.
 
-The **All Notes** index includes page numbers, a page-order toggle, a search box for note titles and headings, and per-note heading disclosures. Heading lists start collapsed. Fieldbook ships the offline [Kalam](https://github.com/itfoundry/kalam) handwriting font (SIL OFL 1.1); choose another typeface, ink color, or paper from **Appearance** at any time.
+The **All Notes** index includes page numbers, a page-order toggle, a search box for note titles and headings, and per-note heading disclosures. Heading lists start collapsed. The index keeps its handwriting style. Fieldbook ships the offline [Kalam](https://github.com/itfoundry/kalam) handwriting font (SIL OFL 1.1); choose another typeface, ink color, or paper from **Appearance** at any time.

@@ -80,8 +80,21 @@ try{
  await w.locator('.suggestion-item').filter({hasText:/^Reference Notes$/}).click({timeout:6000})
  await w.locator('.fb-source-reader strong').filter({hasText:'Already in the vault.'}).waitFor({timeout:8000})
  const noteParagraph=w.locator('.fb-source-reader p').filter({hasText:'Already in the vault.'})
- assert.equal(await noteParagraph.evaluate(e=>getComputedStyle(e).fontSize),'26px')
- assert.equal(await noteParagraph.evaluate(e=>getComputedStyle(e.querySelector('strong')).fontSize),'26px')
+ const metrics=await noteParagraph.evaluate(e=>{
+  const sheet=e.closest('.fb-root'), style=getComputedStyle(sheet)
+  const reference=document.createElement('span')
+  reference.style.fontFamily='var(--font-text,system-ui,sans-serif)'
+  reference.style.fontSize='var(--font-text-size,16px)'
+  sheet.append(reference)
+  const expected=getComputedStyle(reference)
+  const result=[getComputedStyle(e).fontFamily,getComputedStyle(e).fontSize,getComputedStyle(e.querySelector('strong')).fontSize,expected.fontFamily,expected.fontSize,style.getPropertyValue('--font-text').trim()]
+  reference.remove()
+  return result
+ })
+ assert.ok(metrics[5],'Installed Obsidian should provide the note font variable')
+ assert.equal(metrics[0],metrics[3])
+ assert.equal(parseFloat(metrics[1]),parseFloat(metrics[4])+2)
+ assert.equal(metrics[2],metrics[1])
  assert.equal(await w.getByRole('button',{name:'Type or finish editing',exact:true}).count(),0)
  await w.getByRole('button',{name:'Notebook tools',exact:true}).click()
  await w.locator('.fb-tools').getByRole('button',{name:'Back to cover',exact:true}).click()
